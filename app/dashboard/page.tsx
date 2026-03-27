@@ -1,0 +1,2032 @@
+'use client';
+
+import { useState, useEffect, useCallback } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { ARCHETYPES, computeArchetype } from '@/lib/archetype';
+import { format, subDays } from 'date-fns';
+import { useTheme } from '../theme-context';
+
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface Transaction {
+  _id: string;
+  amount: number;
+  category: string;
+  description: string;
+  date: string;
+}
+
+interface Budget {
+  _id: string;
+  category: string;
+  limit: number;
+}
+
+interface Insights {
+  thisMonthTotals: Record<string, number>;
+  lastMonthTotals: Record<string, number>;
+  drift: Record<string, number>;
+  archetype: string;
+  insights: { category: string; drift: number; thisMonth: number; lastMonth: number }[];
+  weekendDiff: number;
+  dailySpending: Record<string, number>;
+}
+
+// ─── Constants ───────────────────────────────────────────────────────────────
+
+const CATEGORIES = [
+  { id: 'dining', emoji: '🍜', label: 'Dining' },
+  { id: 'groceries', emoji: '🛒', label: 'Groceries' },
+  { id: 'coffee', emoji: '☕', label: 'Coffee' },
+  { id: 'entertainment', emoji: '🎮', label: 'Entertainment' },
+  { id: 'transport', emoji: '🚗', label: 'Transport' },
+  { id: 'shopping', emoji: '🛍️', label: 'Shopping' },
+  { id: 'health', emoji: '💊', label: 'Health' },
+  { id: 'travel', emoji: '✈️', label: 'Travel' },
+  { id: 'bills', emoji: '🏠', label: 'Bills' },
+  { id: 'income', emoji: '💰', label: 'Income' },
+  { id: 'other', emoji: '📦', label: 'Other' },
+];
+
+const CAT_COLORS: Record<string, string> = {
+  dining: '#d97706',
+  groceries: '#16a34a',
+  coffee: '#ea580c',
+  entertainment: '#7c3aed',
+  transport: '#2563eb',
+  shopping: '#db2777',
+  health: '#059669',
+  travel: '#0891b2',
+  bills: '#64748b',
+  income: '#16a34a',
+  other: '#94a3b8',
+};
+
+const ARCHETYPE_ORDER = [
+  'homebody', 'foodie', 'shopaholic', 'explorer', 'socialite', 'gamer',
+  'techjunkie', 'creative', 'scholar', 'wellness', 'petparent', 'roadwarrior',
+  'familyfirst', 'philanthropist', 'impulsebuyer', 'gambler', 'statusseeker',
+  'speculator', 'minimalist', 'wealthbuilder',
+];
+
+function fmt(cents: number): string {
+  return `$${(Math.abs(cents) / 100).toFixed(2)}`;
+}
+
+// ─── Donut Chart ─────────────────────────────────────────────────────────────
+
+function DonutChart({ totals, C }: { totals: Record<string, number>; C: ReturnType<typeof makeC> }) {
+  const entries = Object.entries(totals)
+    .filter(([k]) => k !== 'income')
+    .sort((a, b) => b[1] - a[1]);
+  const top4 = entries.slice(0, 4);
+  const otherAmt = entries.slice(4).reduce((s, [, v]) => s + v, 0);
+  const segments = [...top4, ...(otherAmt > 0 ? [['other', otherAmt] as [string, number]] : [])];
+  const total = segments.reduce((s, [, v]) => s + v, 0);
+
+  if (total === 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 160 }}>
+        <span style={{ color: '#94a3b8', fontSize: 13 }}>No expense data yet</span>
+      </div>
+    );
+  }
+
+  const cx = 80, cy = 80, r = 68, innerR = 44;
+  let cumAngle = -Math.PI / 2;
+  const paths: { d: string; color: string; cat: string; pct: number; amt: number }[] = [];
+
+  for (const [cat, amt] of segments) {
+    const pct = amt / total;
+    const angle = pct * 2 * Math.PI;
+    const x1 = cx + r * Math.cos(cumAngle);
+    const y1 = cy + r * Math.sin(cumAngle);
+    const x2 = cx + r * Math.cos(cumAngle + angle);
+    const y2 = cy + r * Math.sin(cumAngle + angle);
+    const ix1 = cx + innerR * Math.cos(cumAngle);
+    const iy1 = cy + innerR * Math.sin(cumAngle);
+    const ix2 = cx + innerR * Math.cos(cumAngle + angle);
+    const iy2 = cy + innerR * Math.sin(cumAngle + angle);
+    const largeArc = angle > Math.PI ? 1 : 0;
+    const d = `M ${ix1} ${iy1} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${innerR} ${innerR} 0 ${largeArc} 0 ${ix1} ${iy1} Z`;
+    paths.push({ d, color: CAT_COLORS[cat] ?? '#94a3b8', cat, pct, amt });
+    cumAngle += angle;
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+      <svg width={160} height={160} viewBox="0 0 160 160" style={{ flexShrink: 0 }}>
+        {paths.map((p, i) => (
+          <path
+            key={i}
+            d={p.d}
+            fill={p.color}
+            opacity={0.92}
+            style={{ transition: 'opacity 0.2s' }}
+          />
+        ))}
+        <circle cx={80} cy={80} r={innerR - 2} fill={C.card} />
+        <text x={80} y={76} textAnchor="middle" fill="#94a3b8" fontSize={10} fontWeight={600}>Total</text>
+        <text x={80} y={92} textAnchor="middle" fill={C.text} fontSize={14} fontWeight={700}>{fmt(total)}</text>
+      </svg>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {paths.map((p, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 3, background: p.color, flexShrink: 0 }} />
+            <span style={{ fontSize: 12, color: C.muted, flex: 1, textTransform: 'capitalize' }}>{p.cat}</span>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>{Math.round(p.pct * 100)}%</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.text, minWidth: 56, textAlign: 'right' }}>{fmt(p.amt)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── Color helper type ────────────────────────────────────────────────────────
+
+function makeC(isDark: boolean) {
+  return {
+    bg: isDark ? '#0a0a0a' : '#f8fafc',
+    card: isDark ? '#1a1a1a' : '#ffffff',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
+    text: isDark ? '#f0f2f8' : '#0f172a',
+    muted: '#64748b',
+    accent: isDark ? '#ffffff' : '#0a0a0a',
+    accentText: isDark ? '#0a0a0a' : '#ffffff',
+    inputBg: isDark ? '#1f1f1f' : '#ffffff',
+    sidebarBg: isDark ? '#111111' : '#ffffff',
+    hoverBg: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
+    stripeBg: isDark ? 'rgba(255,255,255,0.02)' : '#f8fafc',
+    green: '#16a34a',
+    red: '#dc2626',
+    greenDim: 'rgba(22,163,74,0.12)',
+    redDim: 'rgba(220,38,38,0.10)',
+    amber: '#d97706',
+    amberDim: 'rgba(217,119,6,0.10)',
+  };
+}
+
+// ─── Overview Tab ─────────────────────────────────────────────────────────────
+
+function OverviewTab({ transactions, budgets, insights, userName, C }: {
+  transactions: Transaction[];
+  budgets: Budget[];
+  insights: Insights | null;
+  userName: string;
+  C: ReturnType<typeof makeC>;
+}) {
+  const archetype = insights?.archetype ?? 'homebody';
+  const arc = ARCHETYPES[archetype] ?? ARCHETYPES.homebody;
+  const totals = insights?.thisMonthTotals ?? {};
+  const recent = transactions.slice(0, 8);
+
+  const arcIdx = ARCHETYPE_ORDER.indexOf(archetype);
+  const progress = arc.next ? Math.min(90, 15 + arcIdx * 18) : 100;
+
+  const totalSpent = Object.entries(totals)
+    .filter(([k]) => k !== 'income')
+    .reduce((s, [, v]) => s + v, 0);
+  const totalIncome = totals['income'] ?? 0;
+  const net = totalIncome - totalSpent;
+
+  const budgetPcts = budgets.map(b => {
+    const spent = totals[b.category] ?? 0;
+    return Math.min(100, Math.round((spent / b.limit) * 100));
+  });
+  const avgBudgetUsed = budgetPcts.length > 0 ? Math.round(budgetPcts.reduce((s, v) => s + v, 0) / budgetPcts.length) : 0;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>{format(new Date(), 'MMMM yyyy').toUpperCase()}</p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Overview</h1>
+        </div>
+        <div style={{
+          width: 42, height: 42, borderRadius: '50%',
+          background: 'rgba(22,163,74,0.1)',
+          border: '2px solid #16a34a',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 16, fontWeight: 700, color: '#16a34a',
+        }}>
+          {userName?.[0]?.toUpperCase() ?? 'U'}
+        </div>
+      </div>
+
+      {/* Stat cards — 4 in a row */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
+        {/* Total Spent */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>TOTAL SPENT</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: C.red }}>{fmt(totalSpent)}</p>
+          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>This month</p>
+        </div>
+        {/* Total Income */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>TOTAL INCOME</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: C.green }}>{fmt(totalIncome)}</p>
+          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>This month</p>
+        </div>
+        {/* Net */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>NET</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: net >= 0 ? C.green : C.red }}>
+            {net >= 0 ? '+' : '-'}{fmt(Math.abs(net))}
+          </p>
+          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{net >= 0 ? 'Surplus' : 'Deficit'}</p>
+        </div>
+        {/* Budget */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>BUDGET USED</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: avgBudgetUsed >= 90 ? C.red : avgBudgetUsed >= 70 ? C.amber : C.green }}>
+            {budgets.length > 0 ? `${avgBudgetUsed}%` : '—'}
+          </p>
+          {budgets.length > 0 && (
+            <div style={{ marginTop: 8, height: 4, background: C.hoverBg, borderRadius: 2 }}>
+              <div style={{
+                height: '100%',
+                width: `${avgBudgetUsed}%`,
+                background: avgBudgetUsed >= 90 ? C.red : avgBudgetUsed >= 70 ? C.amber : C.green,
+                borderRadius: 2,
+                transition: 'width 0.8s ease',
+              }} />
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Archetype Hero Card */}
+      <div style={{
+        borderRadius: 16,
+        padding: '20px 24px',
+        background: `${arc.color}22`,
+        borderTop: `1px solid ${arc.color}60`,
+        borderRight: `1px solid ${arc.color}60`,
+        borderBottom: `1px solid ${arc.color}60`,
+        borderLeft: `6px solid ${arc.color}`,
+        boxShadow: `0 4px 16px ${arc.color}20`,
+        position: 'relative',
+        overflow: 'hidden',
+      }}>
+        {/* Watermark emoji */}
+        <div style={{
+          position: 'absolute', right: 20, top: '50%',
+          transform: 'translateY(-50%)',
+          fontSize: 80, opacity: 0.18, pointerEvents: 'none',
+          userSelect: 'none',
+        }}>
+          {arc.emoji}
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 14 }}>
+          <div style={{ fontSize: 42, lineHeight: 1 }}>{arc.emoji}</div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: arc.color, letterSpacing: 1, marginBottom: 3 }}>YOUR ARCHETYPE</p>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 5 }}>{arc.name}</h2>
+            <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>{arc.description}</p>
+          </div>
+        </div>
+
+        {arc.next && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>Evolution to {arc.nextName}</span>
+              <span style={{ fontSize: 12, color: arc.color, fontWeight: 700 }}>{progress}%</span>
+            </div>
+            <div style={{ height: 6, background: C.hoverBg, borderRadius: 3 }}>
+              <div style={{ height: '100%', width: `${progress}%`, background: arc.color, borderRadius: 3, transition: 'width 1s ease' }} />
+            </div>
+            <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>{arc.tip}</p>
+          </div>
+        )}
+
+        {/* Evolution path chips */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginTop: 8 }}>
+          {ARCHETYPE_ORDER.map((key, i) => {
+            const a = ARCHETYPES[key];
+            const isActive = key === archetype;
+            const isPast = i < arcIdx;
+            return (
+              <div key={key} style={{
+                display: 'flex', alignItems: 'center', gap: 5,
+                padding: '5px 8px',
+                borderRadius: 10,
+                background: isActive ? `${a.color}20` : isPast ? C.hoverBg : 'transparent',
+                border: `1px solid ${isActive ? a.color : C.border}`,
+                opacity: isPast ? 0.6 : 1,
+              }}>
+                <span style={{ fontSize: 13 }}>{a.emoji}</span>
+                <span style={{ fontSize: 10, fontWeight: isActive ? 800 : 400, color: isActive ? a.color : C.muted, lineHeight: 1.2 }}>
+                  {a.name.replace('The ', '')}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Two-column section: Budget bars + Recent transactions */}
+      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 20 }}>
+        {/* Budget Category Bars */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Budget Status</p>
+          {budgets.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: 13 }}>No budgets set.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {budgets.map(b => {
+                const spent = totals[b.category] ?? 0;
+                const pct = Math.min(100, Math.round((spent / b.limit) * 100));
+                const driftPct = insights?.drift[b.category] ?? 0;
+                const barColor = pct >= 100 ? C.red : pct >= 70 ? C.amber : C.green;
+                const catInfo = CATEGORIES.find(c => c.id === b.category);
+                return (
+                  <div key={b._id}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontSize: 15 }}>{catInfo?.emoji ?? '📦'}</span>
+                        <span style={{ fontSize: 13, color: C.text, fontWeight: 600, textTransform: 'capitalize' }}>{b.category}</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {driftPct !== 0 && (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
+                            background: driftPct > 0 ? C.redDim : C.greenDim,
+                            color: driftPct > 0 ? C.red : C.green,
+                            border: `1px solid ${driftPct > 0 ? 'rgba(220,38,38,0.2)' : 'rgba(22,163,74,0.2)'}`,
+                          }}>
+                            {driftPct > 0 ? '+' : ''}{driftPct}%
+                          </span>
+                        )}
+                        <span style={{ fontSize: 12, color: '#94a3b8' }}>{fmt(spent)} / {fmt(b.limit)}</span>
+                      </div>
+                    </div>
+                    <div style={{ height: 6, background: C.hoverBg, borderRadius: 3 }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${pct}%`,
+                        background: barColor,
+                        borderRadius: 3,
+                        transition: 'width 0.8s ease',
+                        animation: 'fillBar 0.8s ease',
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Recent Transactions */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Recent</p>
+          {recent.length === 0 ? (
+            <p style={{ color: '#94a3b8', fontSize: 13 }}>No transactions yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {recent.map((tx, i) => {
+                const cat = CATEGORIES.find(c => c.id === tx.category);
+                const isIncome = tx.amount > 0;
+                return (
+                  <div key={tx._id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '9px 0',
+                    borderBottom: i < recent.length - 1 ? `1px solid ${C.hoverBg}` : 'none',
+                  }}>
+                    <div style={{
+                      width: 34, height: 34, borderRadius: 10,
+                      background: `${CAT_COLORS[tx.category] ?? '#94a3b8'}15`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 15, flexShrink: 0,
+                    }}>
+                      {cat?.emoji ?? '📦'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {tx.description || tx.category}
+                      </p>
+                      <p style={{ fontSize: 11, color: '#94a3b8' }}>{format(new Date(tx.date), 'MMM d')}</p>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: isIncome ? C.green : C.red, flexShrink: 0 }}>
+                      {isIncome ? '+' : '-'}{fmt(tx.amount)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Donut Chart */}
+      <div style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 16,
+        padding: '20px 24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}>
+        <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Spending Breakdown</p>
+        <DonutChart totals={totals} C={C} />
+      </div>
+    </div>
+  );
+}
+
+// ─── Drift Tab ────────────────────────────────────────────────────────────────
+
+function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<typeof makeC> }) {
+  if (!insights) {
+    return <div style={{ padding: '32px 0', textAlign: 'center', color: '#94a3b8' }}>Loading insights...</div>;
+  }
+
+  const { insights: topInsights, drift, thisMonthTotals, lastMonthTotals, weekendDiff, dailySpending } = insights;
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = subDays(new Date(), 6 - i);
+    const key = format(d, 'yyyy-MM-dd');
+    return { label: format(d, 'EEE'), key, amount: dailySpending[key] ?? 0 };
+  });
+  const maxDaily = Math.max(...days.map(d => d.amount), 1);
+  const avgDaily = days.reduce((s, d) => s + d.amount, 0) / 7;
+
+  const cats = Object.keys({ ...thisMonthTotals, ...lastMonthTotals }).filter(k => k !== 'income');
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>SPENDING DRIFT</p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Drift Report</h1>
+        </div>
+        <div style={{
+          background: C.hoverBg,
+          border: `1px solid ${C.border}`,
+          borderRadius: 20,
+          padding: '5px 14px',
+          fontSize: 12,
+          color: C.muted,
+          fontWeight: 600,
+        }}>
+          {format(subDays(new Date(), 6), 'MMM d')} – {format(new Date(), 'MMM d')}
+        </div>
+      </div>
+
+      {/* Insight Cards — 3 across */}
+      {topInsights.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+          {topInsights.map((ins, i) => {
+            const catInfo = CATEGORIES.find(c => c.id === ins.category);
+            const up = ins.drift > 0;
+            const borderColor = up ? C.red : C.green;
+            return (
+              <div key={i} style={{
+                background: C.card,
+                borderTop: `1px solid ${C.border}`,
+                borderRight: `1px solid ${C.border}`,
+                borderBottom: `1px solid ${C.border}`,
+                borderLeft: `4px solid ${borderColor}`,
+                borderRadius: 16,
+                padding: '18px 20px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12,
+                    background: up ? C.redDim : C.greenDim,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 18,
+                  }}>
+                    {catInfo?.emoji ?? '📦'}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, textTransform: 'capitalize' }}>{ins.category}</p>
+                    <p style={{ fontSize: 11, color: '#94a3b8' }}>{fmt(ins.thisMonth)} this mo.</p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontSize: 28, fontWeight: 800, color: up ? C.red : C.green }}>
+                    {up ? '+' : ''}{ins.drift}%
+                  </span>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>vs last month</span>
+                </div>
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                  {up ? '↑' : '↓'} {fmt(Math.abs(ins.thisMonth - ins.lastMonth))} {up ? 'more' : 'less'}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Daily Bar Chart */}
+      <div style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 16,
+        padding: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Daily Spending — Last 7 Days</p>
+          <div style={{ display: 'flex', gap: 16, fontSize: 11 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: C.green, display: 'inline-block' }} />
+              <span style={{ color: C.muted }}>Under avg</span>
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: C.red, display: 'inline-block' }} />
+              <span style={{ color: C.muted }}>Over avg</span>
+            </span>
+          </div>
+        </div>
+
+        {/* Chart area */}
+        <div style={{ display: 'flex', gap: 16 }}>
+          {/* Y-axis */}
+          <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingBottom: 36, width: 48, flexShrink: 0 }}>
+            {[maxDaily, maxDaily * 0.75, maxDaily * 0.5, maxDaily * 0.25, 0].map((v, i) => (
+              <span key={i} style={{ fontSize: 10, color: '#94a3b8', textAlign: 'right', lineHeight: 1 }}>
+                {v > 0 ? fmt(Math.round(v)) : '$0'}
+              </span>
+            ))}
+          </div>
+
+          {/* Bars + grid */}
+          <div style={{ flex: 1, position: 'relative' }}>
+            {/* Horizontal grid lines */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 36, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
+              {[0, 1, 2, 3, 4].map(i => (
+                <div key={i} style={{ height: 1, background: C.border, opacity: 0.6 }} />
+              ))}
+            </div>
+
+            {/* Average line */}
+            {avgDaily > 0 && (
+              <div style={{
+                position: 'absolute',
+                left: 0, right: 0,
+                bottom: 36 + ((avgDaily / maxDaily) * 200),
+                height: 1,
+                background: '#f59e0b',
+                borderTop: '1.5px dashed #f59e0b',
+                opacity: 0.7,
+                pointerEvents: 'none',
+                zIndex: 2,
+              }}>
+                <span style={{
+                  position: 'absolute', right: 0, top: -18,
+                  fontSize: 9, color: '#f59e0b', fontWeight: 700, whiteSpace: 'nowrap',
+                }}>avg {fmt(Math.round(avgDaily))}</span>
+              </div>
+            )}
+
+            {/* Bars */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 200, paddingBottom: 0 }}>
+              {days.map(d => {
+                const barH = d.amount > 0 ? Math.max(8, (d.amount / maxDaily) * 200) : 4;
+                const isToday = d.key === format(new Date(), 'yyyy-MM-dd');
+                const isOver = d.amount > avgDaily && d.amount > 0;
+                const barColor = isToday ? C.accent : isOver ? C.red : d.amount > 0 ? C.green : C.border;
+                return (
+                  <div key={d.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
+                    {/* Amount label above bar */}
+                    <span style={{
+                      fontSize: 10, fontWeight: 700,
+                      color: d.amount > 0 ? (isOver ? C.red : C.green) : 'transparent',
+                      marginBottom: 4, whiteSpace: 'nowrap',
+                    }}>
+                      {d.amount > 0 ? fmt(d.amount) : ''}
+                    </span>
+                    {/* Bar */}
+                    <div style={{
+                      width: '100%',
+                      height: barH,
+                      background: d.amount > 0
+                        ? `linear-gradient(to top, ${barColor}cc, ${barColor})`
+                        : C.border,
+                      borderRadius: '6px 6px 2px 2px',
+                      transition: 'height 0.6s ease',
+                      boxShadow: d.amount > 0 ? `0 4px 12px ${barColor}40` : 'none',
+                      cursor: 'default',
+                    }}
+                      title={d.amount > 0 ? `${d.label}: ${fmt(d.amount)}` : `${d.label}: $0`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* X-axis labels */}
+            <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+              {days.map(d => {
+                const isToday = d.key === format(new Date(), 'yyyy-MM-dd');
+                return (
+                  <div key={d.key} style={{ flex: 1, textAlign: 'center' }}>
+                    <span style={{
+                      fontSize: 12, fontWeight: isToday ? 700 : 500,
+                      color: isToday ? C.text : C.muted,
+                    }}>{d.label}</span>
+                    {isToday && <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.accent, margin: '3px auto 0' }} />}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer summary */}
+        {days.some(d => d.amount > 0) && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.hoverBg}` }}>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>7-day total: <strong style={{ color: C.text }}>{fmt(days.reduce((s, d) => s + d.amount, 0))}</strong></span>
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>Daily avg: <strong style={{ color: C.text }}>{fmt(Math.round(avgDaily))}</strong></span>
+          </div>
+        )}
+      </div>
+
+      {/* vs Last Month Table */}
+      {cats.length > 0 && (
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '20px 24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>vs Last Month</p>
+          <div>
+            {/* Header row */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '2fr 1fr 1fr 80px',
+              padding: '6px 10px 10px',
+              borderBottom: `2px solid ${C.border}`,
+            }}>
+              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: 0.5 }}>CATEGORY</span>
+              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textAlign: 'right', letterSpacing: 0.5 }}>THIS MO.</span>
+              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textAlign: 'right', letterSpacing: 0.5 }}>LAST MO.</span>
+              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textAlign: 'right', letterSpacing: 0.5 }}>CHANGE</span>
+            </div>
+            {cats.map((cat, i) => {
+              const t = thisMonthTotals[cat] ?? 0;
+              const l = lastMonthTotals[cat] ?? 0;
+              const d = drift[cat] ?? 0;
+              const catInfo = CATEGORIES.find(c => c.id === cat);
+              return (
+                <div key={cat} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '2fr 1fr 1fr 80px',
+                  padding: '10px 10px',
+                  background: i % 2 === 0 ? C.stripeBg : C.card,
+                  borderRadius: 8,
+                  alignItems: 'center',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 15 }}>{catInfo?.emoji ?? '📦'}</span>
+                    <span style={{ fontSize: 13, color: C.text, fontWeight: 500, textTransform: 'capitalize' }}>{cat}</span>
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text, textAlign: 'right' }}>{fmt(t)}</span>
+                  <span style={{ fontSize: 13, color: '#94a3b8', textAlign: 'right' }}>{fmt(l)}</span>
+                  <span style={{
+                    fontSize: 12, fontWeight: 700, textAlign: 'right',
+                    color: d > 0 ? C.red : d < 0 ? C.green : '#94a3b8',
+                  }}>
+                    {d > 0 ? '↑' : d < 0 ? '↓' : ''} {d !== 0 ? `${Math.abs(d)}%` : '—'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Pattern Cards — 2 side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 22 }}>📅</span>
+            <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Weekend Pattern</p>
+          </div>
+          {weekendDiff !== 0 ? (
+            <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+              You spend{' '}
+              <span style={{ color: weekendDiff > 0 ? C.red : C.green, fontWeight: 700 }}>
+                {Math.abs(weekendDiff)}% {weekendDiff > 0 ? 'more' : 'less'}
+              </span>{' '}
+              on weekends than weekdays.
+            </p>
+          ) : (
+            <p style={{ fontSize: 13, color: '#94a3b8' }}>Log more transactions to detect patterns.</p>
+          )}
+        </div>
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '18px 20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 22 }}>📊</span>
+            <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Category Drift</p>
+          </div>
+          {topInsights.length > 0 ? (
+            <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+              Biggest change:{' '}
+              <span style={{ fontWeight: 700, color: C.text, textTransform: 'capitalize' }}>{topInsights[0].category}</span>
+              {' '}
+              <span style={{ color: topInsights[0].drift > 0 ? C.red : C.green, fontWeight: 700 }}>
+                {topInsights[0].drift > 0 ? '+' : ''}{topInsights[0].drift}%
+              </span>
+            </p>
+          ) : (
+            <p style={{ fontSize: 13, color: '#94a3b8' }}>No notable drift detected yet.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Log Tab ──────────────────────────────────────────────────────────────────
+
+function LogTab({ onLogged, budgets, insights, transactions, C }: {
+  onLogged: () => void;
+  budgets: Budget[];
+  insights: Insights | null;
+  transactions: Transaction[];
+  C: ReturnType<typeof makeC>;
+}) {
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState('dining');
+  const [description, setDescription] = useState('');
+  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [isIncome, setIsIncome] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  async function handleLog(e: React.FormEvent) {
+    e.preventDefault();
+    const dollars = parseFloat(amount);
+    if (!dollars || dollars <= 0) {
+      toast.error('Enter a valid amount');
+      return;
+    }
+    const cents = Math.round(dollars * 100);
+    const finalAmount = isIncome ? cents : -cents;
+    setLoading(true);
+    const res = await fetch('/api/transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: finalAmount, category: isIncome ? 'income' : category, description, date }),
+    });
+    setLoading(false);
+    if (!res.ok) {
+      toast.error('Failed to log transaction');
+      return;
+    }
+
+    if (!isIncome) {
+      const budget = budgets.find(b => b.category === category);
+      if (budget) {
+        const thisMonthSpent = (insights?.thisMonthTotals[category] ?? 0) + cents;
+        const pct = (thisMonthSpent / budget.limit) * 100;
+        if (pct >= 100) {
+          toast.error(`🚨 Over budget on ${category}! ${Math.round(pct)}% used`);
+        } else if (pct >= 80) {
+          toast.warning(`⚠️ ${category} budget ${Math.round(pct)}% used`);
+        } else {
+          toast.success('Transaction logged!');
+        }
+      } else {
+        toast.success('Transaction logged!');
+      }
+    } else {
+      toast.success('Income logged!');
+    }
+
+    setAmount('');
+    setDescription('');
+    setDate(format(new Date(), 'yyyy-MM-dd'));
+    onLogged();
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    background: C.inputBg,
+    border: `1px solid ${C.border}`,
+    borderRadius: 10,
+    padding: '12px 14px',
+    fontSize: 15,
+    color: C.text,
+    outline: 'none',
+    boxSizing: 'border-box',
+  };
+
+  const recentLogs = transactions.slice(0, 8);
+  const archetype = insights?.archetype ?? 'homebody';
+  const arc = ARCHETYPES[archetype] ?? ARCHETYPES.homebody;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
+      {/* Header */}
+      <div>
+        <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>NEW ENTRY</p>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Log Transaction</h1>
+      </div>
+
+      {/* Two-column layout */}
+      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+
+      {/* Form */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <form onSubmit={handleLog} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+          {/* Expense / Income Toggle */}
+          <div style={{
+            display: 'flex',
+            background: C.hoverBg,
+            border: `1px solid ${C.border}`,
+            borderRadius: 12,
+            padding: 4,
+          }}>
+            {[{ label: 'Expense', val: false }, { label: 'Income', val: true }].map(opt => (
+              <button
+                key={opt.label}
+                type="button"
+                onClick={() => {
+                  setIsIncome(opt.val);
+                  if (!opt.val && category === 'income') setCategory('dining');
+                  if (opt.val) setCategory('income');
+                }}
+                style={{
+                  flex: 1, padding: '10px', borderRadius: 9, border: 'none', cursor: 'pointer',
+                  background: isIncome === opt.val
+                    ? (opt.val ? C.green : C.red)
+                    : 'transparent',
+                  color: isIncome === opt.val ? '#ffffff' : C.muted,
+                  fontWeight: 700, fontSize: 14, transition: 'all 0.2s',
+                }}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Amount */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 7 }}>Amount</label>
+            <div style={{ position: 'relative' }}>
+              <span style={{
+                position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+                fontSize: 16, color: C.muted, fontWeight: 700, pointerEvents: 'none',
+              }}>$</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                required
+                placeholder="0.00"
+                style={{ ...inputStyle, paddingLeft: 30, fontSize: 18, fontWeight: 700 }}
+              />
+            </div>
+          </div>
+
+          {/* Category — visual chip grid (hidden for income) */}
+          {!isIncome && (
+            <div>
+              <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 10 }}>Category</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                {CATEGORIES.filter(c => c.id !== 'income').map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => setCategory(c.id)}
+                    style={{
+                      background: category === c.id ? `${CAT_COLORS[c.id] ?? C.accent}12` : C.inputBg,
+                      border: `1.5px solid ${category === c.id ? (CAT_COLORS[c.id] ?? C.accent) : C.border}`,
+                      borderRadius: 12,
+                      padding: '9px 4px 7px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      gap: 4,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    <span style={{ fontSize: 20 }}>{c.emoji}</span>
+                    <span style={{ fontSize: 10, color: category === c.id ? (CAT_COLORS[c.id] ?? C.accent) : C.muted, fontWeight: 600 }}>{c.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Description */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 7 }}>Description <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
+            <input
+              type="text"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              placeholder="What was this for?"
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Date */}
+          <div>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 7 }}>Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={e => setDate(e.target.value)}
+              required
+              style={inputStyle}
+            />
+          </div>
+
+          {/* Submit */}
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              background: loading ? '#374151' : C.accent,
+              color: C.accentText,
+              border: 'none',
+              borderRadius: 12,
+              padding: '14px',
+              fontSize: 16,
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
+            {loading ? 'Logging...' : `Log ${isIncome ? 'Income' : 'Expense'}`}
+          </button>
+        </form>
+      </div>
+
+      {/* Right Panel */}
+      <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+
+        {/* Archetype Tip */}
+        <div style={{
+          background: `${arc.color}12`,
+          borderTop: `1px solid ${arc.color}40`,
+          borderRight: `1px solid ${arc.color}40`,
+          borderBottom: `1px solid ${arc.color}40`,
+          borderLeft: `4px solid ${arc.color}`,
+          borderRadius: 16,
+          padding: '18px 20px',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+            <span style={{ fontSize: 24 }}>{arc.emoji}</span>
+            <div>
+              <p style={{ fontSize: 10, color: arc.color, fontWeight: 700, letterSpacing: 1, marginBottom: 2 }}>YOUR ARCHETYPE</p>
+              <p style={{ fontSize: 14, fontWeight: 800, color: C.text }}>{arc.name}</p>
+            </div>
+          </div>
+          <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.7, marginBottom: 12 }}>{arc.description}</p>
+          <div style={{ background: `${arc.color}18`, borderRadius: 10, padding: '10px 14px' }}>
+            <p style={{ fontSize: 11, color: arc.color, fontWeight: 700, marginBottom: 4 }}>💡 TIP TO EVOLVE</p>
+            <p style={{ fontSize: 12, color: C.text, lineHeight: 1.6 }}>{arc.tip}</p>
+          </div>
+        </div>
+
+        {/* Recent Logs */}
+        {recentLogs.length > 0 && (
+          <div style={{
+            background: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Recent Logs</p>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {recentLogs.map((tx, i) => {
+                const cat = CATEGORIES.find(c => c.id === tx.category);
+                const isIncomeTx = tx.amount > 0;
+                return (
+                  <div key={tx._id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10,
+                    padding: '8px 0',
+                    borderBottom: i < recentLogs.length - 1 ? `1px solid ${C.hoverBg}` : 'none',
+                  }}>
+                    <div style={{
+                      width: 32, height: 32, borderRadius: 9,
+                      background: `${CAT_COLORS[tx.category] ?? '#94a3b8'}15`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 14, flexShrink: 0,
+                    }}>
+                      {cat?.emoji ?? '📦'}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {tx.description || tx.category}
+                      </p>
+                      <p style={{ fontSize: 10, color: '#94a3b8' }}>{format(new Date(tx.date), 'MMM d')}</p>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: isIncomeTx ? C.green : C.red, flexShrink: 0 }}>
+                      {isIncomeTx ? '+' : '-'}{fmt(tx.amount)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+      </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Profile Tab ──────────────────────────────────────────────────────────────
+
+function ProfileTab({ userName, userEmail, transactions, insights, C }: {
+  userName: string;
+  userEmail: string;
+  transactions: Transaction[];
+  insights: Insights | null;
+  C: ReturnType<typeof makeC>;
+}) {
+  const archetype = insights?.archetype ?? 'homebody';
+  const arc = ARCHETYPES[archetype] ?? ARCHETYPES.homebody;
+  const arcIdx = ARCHETYPE_ORDER.indexOf(archetype);
+
+  let streak = 0;
+  if (transactions.length > 0) {
+    const oldest = new Date(transactions[transactions.length - 1].date);
+    streak = Math.floor((Date.now() - oldest.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  }
+
+  const thisMonthTotal = Object.values(insights?.thisMonthTotals ?? {}).reduce((s, v) => s + v, 0);
+  const lastMonthTotal = Object.values(insights?.lastMonthTotals ?? {}).reduce((s, v) => s + v, 0);
+  const savedVsLast = lastMonthTotal - thisMonthTotal;
+  const catsTracked = Object.keys(insights?.thisMonthTotals ?? {}).length;
+
+  const now = new Date();
+  const thisMonthIncome = transactions
+    .filter(tx => { const d = new Date(tx.date); return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear() && tx.amount > 0; })
+    .reduce((s, tx) => s + tx.amount, 0);
+
+  const topCategories = Object.entries(insights?.thisMonthTotals ?? {})
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, 5);
+
+  const biggestExpense = transactions.filter(tx => tx.amount < 0).sort((a, b) => a.amount - b.amount)[0] ?? null;
+
+  const lastMonthArchetype = insights?.lastMonthTotals ? computeArchetype(insights.lastMonthTotals) : null;
+  const lastArc = lastMonthArchetype ? (ARCHETYPES[lastMonthArchetype] ?? null) : null;
+
+  // Money Story
+  const thisMonthTxs = transactions.filter(tx => {
+    const d = new Date(tx.date);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const topCat = topCategories[0];
+  const topCatInfo = topCat ? CATEGORIES.find(c => c.id === topCat[0]) : null;
+  const topCatPct = topCat && thisMonthTotal > 0 ? Math.round((topCat[1] / thisMonthTotal) * 100) : 0;
+  const spendDiff = thisMonthTotal - lastMonthTotal;
+  const moneyStory = [
+    `This month you were ${arc.name} ${arc.emoji}.`,
+    topCat && topCatInfo ? `${topCatInfo.label} made up ${topCatPct}% of your spending.` : '',
+    spendDiff > 0
+      ? `You spent ${fmt(spendDiff)} more than last month — your habits are drifting.`
+      : spendDiff < 0
+      ? `You spent ${fmt(Math.abs(spendDiff))} less than last month. Nice work.`
+      : transactions.length > 0 ? `Your spending matched last month exactly.` : '',
+  ].filter(Boolean).join(' ');
+
+  // Fun Stats
+  const avgTx = thisMonthTxs.filter(tx => tx.amount < 0).length > 0
+    ? thisMonthTotal / thisMonthTxs.filter(tx => tx.amount < 0).length
+    : 0;
+  const dayTotals: Record<string, number> = {};
+  thisMonthTxs.filter(tx => tx.amount < 0).forEach(tx => {
+    const day = new Date(tx.date).toLocaleDateString('en-US', { weekday: 'long' });
+    dayTotals[day] = (dayTotals[day] ?? 0) + Math.abs(tx.amount);
+  });
+  const busiestDay = Object.entries(dayTotals).sort(([, a], [, b]) => b - a)[0]?.[0] ?? null;
+  const expenseTxCount = thisMonthTxs.filter(tx => tx.amount < 0).length;
+  const funStats = [
+    expenseTxCount > 0 ? { emoji: '🧾', stat: `${expenseTxCount} purchases`, desc: 'logged this month' } : null,
+    avgTx > 0 ? { emoji: '📐', stat: fmt(Math.round(avgTx)), desc: 'average transaction' } : null,
+    busiestDay ? { emoji: '📅', stat: busiestDay, desc: 'your biggest spending day' } : null,
+    catsTracked > 0 ? { emoji: '🗂️', stat: `${catsTracked} categories`, desc: 'tracked this month' } : null,
+    insights?.weekendDiff !== undefined && insights.weekendDiff !== 0
+      ? { emoji: '🌙', stat: insights.weekendDiff > 0 ? 'Weekend spender' : 'Weekday spender', desc: `${Math.abs(insights.weekendDiff)}% more on ${insights.weekendDiff > 0 ? 'weekends' : 'weekdays'}` }
+      : null,
+  ].filter(Boolean) as { emoji: string; stat: string; desc: string }[];
+
+  const badges: { emoji: string; label: string; desc: string; earned: boolean }[] = [
+    { emoji: '🎯', label: 'First Log',       desc: 'Logged your first transaction',        earned: transactions.length >= 1 },
+    { emoji: '🔥', label: 'On a Roll',        desc: '7+ day tracking streak',               earned: streak >= 7 },
+    { emoji: '📊', label: 'Data Nerd',        desc: 'Logged 20+ transactions',              earned: transactions.length >= 20 },
+    { emoji: '🌈', label: 'Category Explorer', desc: 'Spent across 5+ categories',         earned: catsTracked >= 5 },
+    { emoji: '💚', label: 'Power Saver',      desc: 'Spent less than last month',           earned: savedVsLast > 0 },
+    { emoji: '💎', label: 'Century Club',     desc: 'Logged 100+ transactions',             earned: transactions.length >= 100 },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
+      {/* Header */}
+      <div>
+        <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>ACCOUNT</p>
+        <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Profile</h1>
+      </div>
+
+      {/* Left-right layout on desktop */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+        {/* Left column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* User card */}
+          <div style={{
+            background: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: '20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 16 }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: '50%',
+                background: 'rgba(22,163,74,0.1)',
+                border: '2px solid #16a34a',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: 22, fontWeight: 700, color: '#16a34a',
+                flexShrink: 0,
+              }}>
+                {userName?.[0]?.toUpperCase() ?? 'U'}
+              </div>
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 3 }}>{userName}</h2>
+                <p style={{ fontSize: 13, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userEmail}</p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <div style={{
+                flex: 1,
+                background: C.stripeBg,
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                padding: '10px 12px',
+                textAlign: 'center',
+              }}>
+                <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{streak}</p>
+                <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>DAY STREAK 🔥</p>
+              </div>
+              <div style={{
+                flex: 1,
+                background: C.stripeBg,
+                border: `1px solid ${C.border}`,
+                borderRadius: 10,
+                padding: '10px 12px',
+                textAlign: 'center',
+              }}>
+                <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{transactions.length}</p>
+                <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>TRANSACTIONS</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Archetype card */}
+          <div style={{
+            background: `${arc.color}22`,
+            borderTop: `1px solid ${arc.color}60`,
+            borderRight: `1px solid ${arc.color}60`,
+            borderBottom: `1px solid ${arc.color}60`,
+            borderLeft: `6px solid ${arc.color}`,
+            borderRadius: 16,
+            padding: '18px 20px',
+            boxShadow: `0 4px 16px ${arc.color}20`,
+            position: 'relative',
+            overflow: 'hidden',
+          }}>
+            {/* Watermark */}
+            <div style={{
+              position: 'absolute', right: 16, top: '50%',
+              transform: 'translateY(-50%)',
+              fontSize: 64, opacity: 0.18, pointerEvents: 'none',
+              userSelect: 'none',
+            }}>
+              {arc.emoji}
+            </div>
+            <p style={{ fontSize: 11, fontWeight: 700, color: arc.color, letterSpacing: 1, marginBottom: 10 }}>CURRENT ARCHETYPE</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+              <span style={{ fontSize: 38 }}>{arc.emoji}</span>
+              <div>
+                <h3 style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 3 }}>{arc.name}</h3>
+                <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.4 }}>{arc.tip}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Evolution path */}
+          <div style={{
+            background: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14 }}>Archetype Path</p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 10 }}>
+              {ARCHETYPE_ORDER.map((key, i) => {
+                const a = ARCHETYPES[key];
+                const isActive = key === archetype;
+                const isPast = i < arcIdx;
+                return (
+                  <div key={key} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                    <div style={{
+                      width: 36, height: 36, borderRadius: '50%',
+                      background: isActive ? `${a.color}20` : isPast ? C.hoverBg : C.stripeBg,
+                      border: `2px solid ${isActive ? a.color : isPast ? '#cbd5e1' : C.border}`,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: 15,
+                      boxShadow: isActive ? `0 0 8px ${a.color}60` : 'none',
+                    }}>
+                      {a.emoji}
+                    </div>
+                    <span style={{ fontSize: 9, color: isActive ? a.color : '#94a3b8', fontWeight: isActive ? 700 : 400, textAlign: 'center', lineHeight: 1.3 }}>
+                      {a.name.replace('The ', '')}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Archetype History */}
+          <div style={{
+            background: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Archetype History</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {lastArc ? (
+                <>
+                  <div style={{ textAlign: 'center', flex: 1 }}>
+                    <div style={{ fontSize: 28, marginBottom: 4 }}>{lastArc.emoji}</div>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: lastArc.color }}>{lastArc.name}</p>
+                    <p style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Last Month</p>
+                  </div>
+                  <div style={{ fontSize: 18, color: C.muted }}>→</div>
+                </>
+              ) : (
+                <div style={{ textAlign: 'center', flex: 1 }}>
+                  <div style={{ fontSize: 28, marginBottom: 4 }}>❓</div>
+                  <p style={{ fontSize: 11, color: C.muted }}>No data yet</p>
+                  <p style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>Last Month</p>
+                </div>
+              )}
+              <div style={{ textAlign: 'center', flex: 1 }}>
+                <div style={{ fontSize: 28, marginBottom: 4 }}>{arc.emoji}</div>
+                <p style={{ fontSize: 11, fontWeight: 700, color: arc.color }}>{arc.name}</p>
+                <p style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>This Month</p>
+              </div>
+            </div>
+            {lastArc && lastMonthArchetype !== archetype && (
+              <p style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, marginTop: 12, textAlign: 'center' }}>
+                You evolved this month! 🎉
+              </p>
+            )}
+            {lastArc && lastMonthArchetype === archetype && (
+              <p style={{ fontSize: 11, color: C.muted, marginTop: 12, textAlign: 'center' }}>
+                Consistent archetype — keep going.
+              </p>
+            )}
+          </div>
+
+          {/* Share + Next Badge */}
+          <div style={{ display: 'flex', gap: 12 }}>
+            <ShareArchetypeCard arc={arc} C={C} />
+            <NextBadgeCard badges={badges} C={C} />
+          </div>
+        </div>
+
+        {/* Right column */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Stats grid */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            {[
+              { label: 'Spent This Month', value: fmt(thisMonthTotal), color: C.red },
+              { label: 'vs Last Month', value: savedVsLast >= 0 ? `${fmt(savedVsLast)} saved` : `${fmt(Math.abs(savedVsLast))} more`, color: savedVsLast >= 0 ? C.green : C.red },
+              { label: 'Transactions', value: transactions.length.toString(), color: C.text },
+              { label: 'Categories', value: catsTracked.toString(), color: '#7c3aed' },
+            ].map(s => (
+              <div key={s.label} style={{
+                background: C.card,
+                border: `1px solid ${C.border}`,
+                borderRadius: 14,
+                padding: '16px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+              }}>
+                <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>{s.label.toUpperCase()}</p>
+                <p style={{ fontSize: 18, fontWeight: 800, color: s.color }}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Income vs Expenses Bar */}
+          <div style={{
+            background: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Income vs Expenses</p>
+            {(() => {
+              const total = thisMonthIncome + thisMonthTotal;
+              const incomePct = total > 0 ? (thisMonthIncome / total) * 100 : 50;
+              const expensePct = 100 - incomePct;
+              return (
+                <>
+                  <div style={{ display: 'flex', height: 12, borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+                    <div style={{ width: `${incomePct}%`, background: '#16a34a', transition: 'width 0.6s ease' }} />
+                    <div style={{ width: `${expensePct}%`, background: '#ef4444', transition: 'width 0.6s ease' }} />
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#16a34a' }} />
+                      <span style={{ fontSize: 12, color: C.muted }}>Income <span style={{ fontWeight: 700, color: '#16a34a' }}>{fmt(thisMonthIncome)}</span></span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444' }} />
+                      <span style={{ fontSize: 12, color: C.muted }}>Spent <span style={{ fontWeight: 700, color: '#ef4444' }}>{fmt(thisMonthTotal)}</span></span>
+                    </div>
+                  </div>
+                </>
+              );
+            })()}
+          </div>
+
+          {/* Top Spending Categories */}
+          {topCategories.length > 0 && (
+            <div style={{
+              background: C.card,
+              border: `1px solid ${C.border}`,
+              borderRadius: 16,
+              padding: '18px 20px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Top Categories This Month</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {topCategories.map(([cat, amt], i) => {
+                  const catInfo = CATEGORIES.find(c => c.id === cat);
+                  const color = CAT_COLORS[cat] ?? '#94a3b8';
+                  const pct = thisMonthTotal > 0 ? (amt / thisMonthTotal) * 100 : 0;
+                  return (
+                    <div key={cat}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>
+                          {catInfo?.emoji} {catInfo?.label ?? cat}
+                        </span>
+                        <span style={{ fontSize: 12, color: C.muted }}>{fmt(amt)} · {Math.round(pct)}%</span>
+                      </div>
+                      <div style={{ height: 6, background: C.hoverBg, borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 4, transition: 'width 0.6s ease' }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Biggest Single Expense */}
+          {biggestExpense && (
+            <div style={{
+              background: C.card,
+              border: `1px solid ${C.border}`,
+              borderRadius: 16,
+              padding: '18px 20px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+            }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 }}>Biggest Expense</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 44, height: 44, borderRadius: 12,
+                  background: `${CAT_COLORS[biggestExpense.category] ?? '#94a3b8'}15`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0,
+                }}>
+                  {CATEGORIES.find(c => c.id === biggestExpense.category)?.emoji ?? '📦'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {biggestExpense.description || biggestExpense.category}
+                  </p>
+                  <p style={{ fontSize: 11, color: C.muted }}>{format(new Date(biggestExpense.date), 'MMM d, yyyy')}</p>
+                </div>
+                <span style={{ fontSize: 16, fontWeight: 800, color: '#ef4444', flexShrink: 0 }}>
+                  -{fmt(Math.abs(biggestExpense.amount))}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Monthly Montage */}
+          <div style={{ display: 'flex', gap: 16 }}>
+            {/* Monthly Montage */}
+            <div style={{
+              flex: 1,
+              background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
+              border: '1px solid rgba(139,92,246,0.3)',
+              borderRadius: 16,
+              padding: '20px',
+              position: 'relative',
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                position: 'absolute', top: -20, right: -20, width: 100, height: 100,
+                borderRadius: '50%', background: 'rgba(139,92,246,0.15)',
+              }} />
+              <p style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: 1, marginBottom: 6 }}>✨ MONTHLY MONTAGE</p>
+              <h3 style={{ fontSize: 15, fontWeight: 800, color: '#ffffff', marginBottom: 6 }}>Your spending story, cut together.</h3>
+              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5, marginBottom: 14 }}>
+                Top categories, biggest splurge, archetype evolution, and totals.
+              </p>
+              <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 18, fontWeight: 800, color: '#a78bfa' }}>{arc.emoji}</p>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Archetype</p>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 18, fontWeight: 800, color: '#ffffff' }}>{transactions.length}</p>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Transactions</p>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 18, fontWeight: 800, color: '#ffffff' }}>{fmt(thisMonthTotal)}</p>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>This Month</p>
+                </div>
+              </div>
+              <div style={{
+                background: 'rgba(139,92,246,0.2)',
+                border: '1px solid rgba(139,92,246,0.4)',
+                borderRadius: 10,
+                padding: '8px',
+                textAlign: 'center',
+                fontSize: 12,
+                color: '#a78bfa',
+                fontWeight: 700,
+              }}>
+                Coming Soon — end of month
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Badges */}
+      <div style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 16,
+        padding: '20px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 16 }}>Achievements</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
+          {badges.map(b => (
+            <div key={b.label} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+              padding: '14px 8px',
+              borderRadius: 14,
+              background: b.earned ? 'rgba(22,163,74,0.06)' : C.stripeBg,
+              border: `1px solid ${b.earned ? 'rgba(22,163,74,0.2)' : C.border}`,
+              opacity: b.earned ? 1 : 0.4,
+              transition: 'all 0.2s',
+            }}>
+              <span style={{ fontSize: 26, filter: b.earned ? 'none' : 'grayscale(1)' }}>{b.emoji}</span>
+              <p style={{ fontSize: 11, fontWeight: 700, color: b.earned ? C.text : C.muted, textAlign: 'center', lineHeight: 1.3 }}>{b.label}</p>
+              <p style={{ fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 1.4 }}>{b.desc}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* Two-column: Money Story + Fun Stats */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+
+        {/* Your Money Story */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <span style={{ fontSize: 18 }}>📖</span>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Your Money Story</p>
+          </div>
+          {moneyStory ? (
+            <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.9 }}>{moneyStory}</p>
+          ) : (
+            <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7 }}>Log some transactions this month and your story will appear here.</p>
+          )}
+          {arc.nextName && (
+            <div style={{
+              marginTop: 14,
+              padding: '10px 14px',
+              background: `${arc.color}10`,
+              borderRadius: 10,
+              borderLeft: `3px solid ${arc.color}`,
+            }}>
+              <p style={{ fontSize: 12, color: arc.color, fontWeight: 600 }}>
+                Next chapter: evolve into {arc.nextName} {arc.next ? ARCHETYPES[arc.next]?.emoji : ''}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {/* Fun Stats */}
+        <div style={{
+          background: C.card,
+          border: `1px solid ${C.border}`,
+          borderRadius: 16,
+          padding: '20px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+            <span style={{ fontSize: 18 }}>⚡</span>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Fun Stats</p>
+          </div>
+          {funStats.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {funStats.map((s, i) => (
+                <div key={i} style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '10px 12px',
+                  background: C.stripeBg,
+                  borderRadius: 10,
+                }}>
+                  <span style={{ fontSize: 20 }}>{s.emoji}</span>
+                  <div>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{s.stat}</p>
+                    <p style={{ fontSize: 11, color: C.muted }}>{s.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.7 }}>Log transactions this month to see your fun stats.</p>
+          )}
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
+// ─── Share Archetype Card ─────────────────────────────────────────────────────
+
+function ShareArchetypeCard({ arc, C }: { arc: typeof ARCHETYPES[string]; C: ReturnType<typeof makeC> }) {
+  const [copied, setCopied] = useState(false);
+  const text = `I'm ${arc.name} ${arc.emoji} on Spendrift — my spending personality tracker. What's yours?`;
+  const handleCopy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div style={{
+      background: `${arc.color}12`,
+      borderTop: `1px solid ${arc.color}30`,
+      borderRight: `1px solid ${arc.color}30`,
+      borderBottom: `1px solid ${arc.color}30`,
+      borderLeft: `3px solid ${arc.color}`,
+      borderRadius: 14,
+      padding: '14px',
+      flex: 1,
+    }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: arc.color, letterSpacing: 1, marginBottom: 8 }}>SHARE</p>
+      <p style={{ fontSize: 22, marginBottom: 6 }}>{arc.emoji}</p>
+      <p style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4, lineHeight: 1.3 }}>{arc.name}</p>
+      <p style={{ fontSize: 10, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>Share your spending personality</p>
+      <button
+        onClick={handleCopy}
+        style={{
+          width: '100%', padding: '8px', borderRadius: 8, border: `1px solid ${arc.color}50`,
+          background: copied ? `${arc.color}20` : 'transparent',
+          color: arc.color, fontSize: 11, fontWeight: 700, cursor: 'pointer',
+        }}
+      >
+        {copied ? '✓ Copied!' : '📋 Copy'}
+      </button>
+    </div>
+  );
+}
+
+// ─── Next Badge Card ──────────────────────────────────────────────────────────
+
+function NextBadgeCard({ badges, C }: { badges: { emoji: string; label: string; desc: string; earned: boolean }[]; C: ReturnType<typeof makeC> }) {
+  const next = badges.find(b => !b.earned) ?? null;
+  return (
+    <div style={{
+      background: C.card,
+      border: `1px solid ${C.border}`,
+      borderRadius: 14,
+      padding: '14px',
+      flex: 1,
+    }}>
+      <p style={{ fontSize: 10, fontWeight: 700, color: '#94a3b8', letterSpacing: 1, marginBottom: 8 }}>NEXT BADGE</p>
+      {next ? (
+        <>
+          <p style={{ fontSize: 22, marginBottom: 6, filter: 'grayscale(1)', opacity: 0.5 }}>{next.emoji}</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4, lineHeight: 1.3 }}>{next.label}</p>
+          <p style={{ fontSize: 10, color: C.muted, lineHeight: 1.5 }}>{next.desc}</p>
+        </>
+      ) : (
+        <>
+          <p style={{ fontSize: 22, marginBottom: 6 }}>🏆</p>
+          <p style={{ fontSize: 11, fontWeight: 700, color: C.text, marginBottom: 4 }}>All earned!</p>
+          <p style={{ fontSize: 10, color: C.muted, lineHeight: 1.5 }}>You've unlocked every badge.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+
+const TABS = [
+  { id: 'overview', label: 'Overview', icon: '📊' },
+  { id: 'drift', label: 'Drift Report', icon: '〜' },
+  { id: 'log', label: 'Log Expense', icon: '➕' },
+  { id: 'profile', label: 'Profile', icon: '👤' },
+];
+
+function Sidebar({ activeTab, setActiveTab, userName, userEmail, C, toggle, isDark }: {
+  activeTab: string;
+  setActiveTab: (t: string) => void;
+  userName: string;
+  userEmail: string;
+  C: ReturnType<typeof makeC>;
+  toggle: () => void;
+  isDark: boolean;
+}) {
+  return (
+    <div className="sidebar" style={{
+      width: 240,
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      height: '100vh',
+      background: C.sidebarBg,
+      borderRight: `1px solid ${C.border}`,
+      display: 'flex',
+      flexDirection: 'column',
+      padding: '24px 16px',
+      zIndex: 50,
+    }}>
+      {/* Logo */}
+      <div style={{ marginBottom: 8, paddingLeft: 6 }}>
+        <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.5px' }}>
+          <span style={{ color: C.text }}>Spen</span>
+          <span style={{ color: '#16a34a' }}>Drift</span>
+        </span>
+      </div>
+
+      <div style={{ height: 1, background: C.border, margin: '16px 0' }} />
+
+      {/* Nav items */}
+      <nav style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '10px 14px',
+                borderRadius: 10,
+                border: 'none',
+                cursor: 'pointer',
+                background: isActive ? C.accent : 'transparent',
+                color: isActive ? C.accentText : C.muted,
+                fontWeight: isActive ? 700 : 500,
+                fontSize: 14,
+                textAlign: 'left',
+                width: '100%',
+                transition: 'all 0.15s',
+              }}
+            >
+              <span style={{ fontSize: 16, width: 22, textAlign: 'center', flexShrink: 0 }}>{tab.icon}</span>
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* User + sign out at bottom */}
+      <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
+        <div style={{ marginBottom: 10, paddingLeft: 4 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userName}</p>
+          <p style={{ fontSize: 11, color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userEmail}</p>
+        </div>
+        {/* Theme toggle button */}
+        <button
+          onClick={toggle}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            width: '100%', padding: '10px 14px',
+            background: 'transparent', border: `1px solid ${C.border}`,
+            borderRadius: 10, cursor: 'pointer',
+            color: C.muted, fontSize: 13, fontWeight: 600,
+            marginBottom: 8,
+          }}
+        >
+          {isDark ? '☀️ Light mode' : '🌙 Dark mode'}
+        </button>
+        <button
+          onClick={() => signOut({ callbackUrl: '/' })}
+          style={{
+            width: '100%',
+            background: 'transparent',
+            border: '1px solid rgba(220,38,38,0.2)',
+            borderRadius: 10,
+            padding: '9px 14px',
+            color: '#dc2626',
+            fontSize: 13,
+            fontWeight: 600,
+            cursor: 'pointer',
+            textAlign: 'left',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <span>↩</span> Sign Out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+
+export default function DashboardPage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const { theme, toggle } = useTheme();
+  const isDark = theme === 'dark';
+  const C = makeC(isDark);
+
+  const [activeTab, setActiveTab] = useState<string>('overview');
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [insights, setInsights] = useState<Insights | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (status === 'unauthenticated') router.push('/login');
+  }, [status, router]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [txRes, bRes, iRes] = await Promise.all([
+        fetch('/api/transactions'),
+        fetch('/api/budgets'),
+        fetch('/api/insights'),
+      ]);
+      if (txRes.ok) setTransactions(await txRes.json());
+      if (bRes.ok) setBudgets(await bRes.json());
+      if (iRes.ok) setInsights(await iRes.json());
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (status === 'authenticated') fetchData();
+  }, [status, fetchData]);
+
+  if (status === 'loading' || loading) {
+    return (
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>
+            <span style={{ color: C.text, fontWeight: 800 }}>Spen</span>
+            <span style={{ color: '#16a34a', fontWeight: 800 }}>Drift</span>
+          </div>
+          <p style={{ color: '#94a3b8', fontSize: 14 }}>Loading your financial data...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!session) return null;
+
+  const userName = session.user?.name ?? 'User';
+  const userEmail = session.user?.email ?? '';
+
+  return (
+    <div style={{ minHeight: '100vh', background: C.bg }}>
+      {/* Responsive styles */}
+      <style>{`
+        @media (max-width: 767px) {
+          .sidebar { display: none !important; }
+          .bottom-nav { display: flex !important; }
+          .main-content { margin-left: 0 !important; padding: 16px 16px 80px !important; }
+        }
+        @media (min-width: 768px) {
+          .bottom-nav { display: none !important; }
+          .sidebar { display: flex !important; }
+        }
+        button:hover:not(:disabled) {
+          opacity: 0.88;
+        }
+        .sidebar button:hover {
+          background: ${C.hoverBg} !important;
+          color: ${C.text} !important;
+          opacity: 1 !important;
+        }
+        .sidebar button[style*="background: ${C.accent}"]:hover {
+          opacity: 0.9 !important;
+          color: ${C.accentText} !important;
+        }
+        @keyframes fadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fillBar {
+          from { width: 0%; }
+        }
+      `}</style>
+
+      {/* Sidebar */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        userName={userName}
+        userEmail={userEmail}
+        C={C}
+        toggle={toggle}
+        isDark={isDark}
+      />
+
+      {/* Main content */}
+      <div className="main-content" style={{ marginLeft: 240, padding: '32px 40px', minHeight: '100vh' }}>
+        {activeTab === 'overview' && (
+          <OverviewTab
+            transactions={transactions}
+            budgets={budgets}
+            insights={insights}
+            userName={userName}
+            C={C}
+          />
+        )}
+        {activeTab === 'drift' && <DriftTab insights={insights} C={C} />}
+        {activeTab === 'log' && (
+          <LogTab
+            onLogged={fetchData}
+            budgets={budgets}
+            insights={insights}
+            transactions={transactions}
+            C={C}
+          />
+        )}
+        {activeTab === 'profile' && (
+          <ProfileTab
+            userName={userName}
+            userEmail={userEmail}
+            transactions={transactions}
+            insights={insights}
+            C={C}
+          />
+        )}
+      </div>
+
+      {/* Bottom nav (mobile only) */}
+      <div className="bottom-nav" style={{
+        position: 'fixed',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        background: isDark ? 'rgba(17,17,17,0.97)' : 'rgba(255,255,255,0.97)',
+        backdropFilter: 'blur(20px)',
+        borderTop: `1px solid ${C.border}`,
+        display: 'none',
+        zIndex: 100,
+      }}>
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.id;
+          const isLog = tab.id === 'log';
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                flex: 1,
+                padding: isLog ? '8px 0 12px' : '12px 0 16px',
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 3,
+                position: 'relative',
+              }}
+            >
+              {isLog ? (
+                <div style={{
+                  width: 46, height: 46,
+                  borderRadius: '50%',
+                  background: isActive ? C.accent : C.hoverBg,
+                  border: `2px solid ${C.accent}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 20, fontWeight: 700,
+                  color: isActive ? C.accentText : C.accent,
+                  marginTop: -22,
+                  boxShadow: isActive ? `0 4px 12px rgba(10,10,10,0.3)` : '0 2px 8px rgba(0,0,0,0.1)',
+                  transition: 'all 0.2s',
+                }}>
+                  +
+                </div>
+              ) : (
+                <span style={{
+                  fontSize: 18,
+                  color: isActive ? C.text : '#94a3b8',
+                  transition: 'color 0.2s',
+                }}>
+                  {tab.icon}
+                </span>
+              )}
+              <span style={{
+                fontSize: 10,
+                fontWeight: isActive ? 700 : 400,
+                color: isActive ? C.text : '#94a3b8',
+                transition: 'color 0.2s',
+              }}>
+                {tab.id === 'drift' ? 'Drift' : tab.id === 'log' ? 'Log' : tab.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

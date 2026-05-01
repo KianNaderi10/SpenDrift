@@ -308,7 +308,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
       {/* 7-day spending bar chart */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Daily Spending — Last 7 Days</p>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Daily Spending — Last 7 Days</p>
           <p style={{ fontSize: 12, color: C.muted }}>{fmt(days.reduce((s, d) => s + d.amount, 0))} total</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 80 }}>
@@ -405,33 +405,29 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
           </div>
         )}
 
-        {/* Evolution path chips */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8, marginTop: 8 }}>
-          {ARCHETYPE_ORDER.map((key, i) => {
-            const a = ARCHETYPES[key];
-            const isActive = key === archetype;
-            const isPast = i < arcIdx;
-            return (
-              <div key={key} style={{
-                display: 'flex', alignItems: 'center', gap: 5,
-                padding: '5px 8px',
-                borderRadius: 10,
-                background: isActive ? `${a.color}20` : isPast ? C.hoverBg : 'transparent',
-                border: `1px solid ${isActive ? a.color : C.border}`,
-                opacity: isPast ? 0.6 : 1,
-              }}>
-                <span style={{ fontSize: 13 }}>{a.emoji}</span>
-                <span style={{ fontSize: 10, fontWeight: isActive ? 800 : 400, color: isActive ? a.color : C.muted, lineHeight: 1.2 }}>
-                  {a.name.replace('The ', '')}
-                </span>
-              </div>
-            );
-          })}
+        {/* Evolution position */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 7,
+            background: `${arc.color}20`, border: `1px solid ${arc.color}50`,
+            borderRadius: 20, padding: '6px 12px',
+          }}>
+            <span style={{ fontSize: 14 }}>{arc.emoji}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: arc.color }}>{arc.name}</span>
+          </div>
+          <span style={{ fontSize: 12, color: C.muted }}>
+            #{arcIdx + 1} of {ARCHETYPE_ORDER.length} archetypes
+          </span>
+          {arc.next && (
+            <span style={{ fontSize: 12, color: C.muted }}>
+              · Next: <span style={{ color: C.text, fontWeight: 600 }}>{arc.nextName}</span>
+            </span>
+          )}
         </div>
       </div>
 
       {/* Two-column section: Budget bars + Recent transactions */}
-      <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: budgets.length === 0 ? '1fr 1fr' : '3fr 2fr', gap: 20 }}>
         {/* Budget Category Bars */}
         <div style={{
           background: C.card,
@@ -442,7 +438,21 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Budget Status</p>
           {budgets.length === 0 ? (
-            <p style={{ color: '#94a3b8', fontSize: 13 }}>No budgets set.</p>
+            <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
+              <div style={{ fontSize: 28 }}>📊</div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>No budgets set</p>
+              <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>Set spending limits per category to track how you're doing each month.</p>
+              <button
+                onClick={() => onNavigate('log')}
+                style={{
+                  marginTop: 4, background: C.accent, color: C.accentText,
+                  border: 'none', borderRadius: 8, padding: '9px 18px',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                Set a Budget
+              </button>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {budgets.map(b => {
@@ -572,7 +582,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 18 }}>🏦</span>
-          <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Connect Bank Account</p>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Connect Bank Account</p>
         </div>
         <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
           Link your bank to automatically import transactions. Uses Plaid — your credentials are never stored.

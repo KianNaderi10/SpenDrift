@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ARCHETYPES, computeArchetype } from '@/lib/archetype';
 import { format, subDays } from 'date-fns';
 import { useTheme } from '../theme-context';
+import PlaidLinkButton from '../components/PlaidLinkButton';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -171,11 +172,12 @@ function makeC(isDark: boolean) {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ transactions, budgets, insights, userName, C }: {
+function OverviewTab({ transactions, budgets, insights, userName, onRefresh, C }: {
   transactions: Transaction[];
   budgets: Budget[];
   insights: Insights | null;
   userName: string;
+  onRefresh: () => void;
   C: ReturnType<typeof makeC>;
 }) {
   const archetype = insights?.archetype ?? 'homebody';
@@ -192,11 +194,31 @@ function OverviewTab({ transactions, budgets, insights, userName, C }: {
   const totalIncome = totals['income'] ?? 0;
   const net = totalIncome - totalSpent;
 
+  const lastTotals = insights?.lastMonthTotals ?? {};
+  const lastSpent = Object.entries(lastTotals).filter(([k]) => k !== 'income').reduce((s, [, v]) => s + v, 0);
+  const lastIncome = lastTotals['income'] ?? 0;
+  const lastNet = lastIncome - lastSpent;
+
+  function trendPct(curr: number, prev: number) {
+    if (prev === 0) return null;
+    return Math.round(((curr - prev) / prev) * 100);
+  }
+  const spentTrend = trendPct(totalSpent, lastSpent);
+  const incomeTrend = trendPct(totalIncome, lastIncome);
+  const netTrend = trendPct(net, lastNet);
+
   const budgetPcts = budgets.map(b => {
     const spent = totals[b.category] ?? 0;
     return Math.min(100, Math.round((spent / b.limit) * 100));
   });
   const avgBudgetUsed = budgetPcts.length > 0 ? Math.round(budgetPcts.reduce((s, v) => s + v, 0) / budgetPcts.length) : 0;
+
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = subDays(new Date(), 6 - i);
+    const key = format(d, 'yyyy-MM-dd');
+    return { label: format(d, 'EEE'), key, amount: insights?.dailySpending[key] ?? 0 };
+  });
+  const maxDaily = Math.max(...days.map(d => d.amount), 1);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
@@ -220,66 +242,83 @@ function OverviewTab({ transactions, budgets, insights, userName, C }: {
       {/* Stat cards — 4 in a row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 14 }}>
         {/* Total Spent */}
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '18px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>TOTAL SPENT</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: C.red }}>{fmt(totalSpent)}</p>
-          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>This month</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>vs last month</span>
+            {spentTrend !== null && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: spentTrend > 0 ? C.red : C.green }}>
+                {spentTrend > 0 ? '↑' : '↓'}{Math.abs(spentTrend)}%
+              </span>
+            )}
+          </div>
         </div>
         {/* Total Income */}
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '18px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>TOTAL INCOME</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: C.green }}>{fmt(totalIncome)}</p>
-          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>This month</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>vs last month</span>
+            {incomeTrend !== null && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: incomeTrend >= 0 ? C.green : C.red }}>
+                {incomeTrend >= 0 ? '↑' : '↓'}{Math.abs(incomeTrend)}%
+              </span>
+            )}
+          </div>
         </div>
         {/* Net */}
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '18px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>NET</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: net >= 0 ? C.green : C.red }}>
             {net >= 0 ? '+' : '-'}{fmt(Math.abs(net))}
           </p>
-          <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{net >= 0 ? 'Surplus' : 'Deficit'}</p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>{net >= 0 ? 'Surplus' : 'Deficit'}</span>
+            {netTrend !== null && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: netTrend >= 0 ? C.green : C.red }}>
+                {netTrend >= 0 ? '↑' : '↓'}{Math.abs(netTrend)}%
+              </span>
+            )}
+          </div>
         </div>
         {/* Budget */}
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '18px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>BUDGET USED</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: avgBudgetUsed >= 90 ? C.red : avgBudgetUsed >= 70 ? C.amber : C.green }}>
             {budgets.length > 0 ? `${avgBudgetUsed}%` : '—'}
           </p>
           {budgets.length > 0 && (
             <div style={{ marginTop: 8, height: 4, background: C.hoverBg, borderRadius: 2 }}>
-              <div style={{
-                height: '100%',
-                width: `${avgBudgetUsed}%`,
-                background: avgBudgetUsed >= 90 ? C.red : avgBudgetUsed >= 70 ? C.amber : C.green,
-                borderRadius: 2,
-                transition: 'width 0.8s ease',
-              }} />
+              <div style={{ height: '100%', width: `${avgBudgetUsed}%`, background: avgBudgetUsed >= 90 ? C.red : avgBudgetUsed >= 70 ? C.amber : C.green, borderRadius: 2, transition: 'width 0.8s ease' }} />
             </div>
           )}
+        </div>
+      </div>
+
+      {/* 7-day spending bar chart */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+          <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Daily Spending — Last 7 Days</p>
+          <p style={{ fontSize: 12, color: C.muted }}>{fmt(days.reduce((s, d) => s + d.amount, 0))} total</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 80 }}>
+          {days.map((d) => {
+            const pct = d.amount / maxDaily;
+            const isToday = d.label === format(new Date(), 'EEE');
+            return (
+              <div key={d.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, height: '100%', justifyContent: 'flex-end' }}>
+                <div style={{ fontSize: 10, color: C.muted, fontWeight: 500 }}>{d.amount > 0 ? fmt(d.amount).replace('$', '') : ''}</div>
+                <div style={{
+                  width: '100%', borderRadius: 4,
+                  height: `${Math.max(pct * 56, d.amount > 0 ? 4 : 2)}px`,
+                  background: isToday ? '#16a34a' : d.amount > 0 ? `${C.green}60` : C.hoverBg,
+                  transition: 'height 0.6s ease',
+                }} />
+                <div style={{ fontSize: 10, color: isToday ? '#16a34a' : C.muted, fontWeight: isToday ? 700 : 400 }}>{d.label}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -469,6 +508,24 @@ function OverviewTab({ transactions, budgets, insights, userName, C }: {
       }}>
         <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Spending Breakdown</p>
         <DonutChart totals={totals} C={C} />
+      </div>
+
+      {/* Connect Bank */}
+      <div style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 16,
+        padding: '20px 24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 18 }}>🏦</span>
+          <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Connect Bank Account</p>
+        </div>
+        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
+          Link your bank to automatically import transactions. Uses Plaid — your credentials are never stored.
+        </p>
+        <PlaidLinkButton onSuccess={onRefresh} C={C} />
       </div>
     </div>
   );
@@ -1096,12 +1153,13 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
 
 // ─── Profile Tab ──────────────────────────────────────────────────────────────
 
-function ProfileTab({ userName, userEmail, transactions, insights, C }: {
+function ProfileTab({ userName, userEmail, transactions, insights, C, onRefresh }: {
   userName: string;
   userEmail: string;
   transactions: Transaction[];
   insights: Insights | null;
   C: ReturnType<typeof makeC>;
+  onRefresh: () => void;
 }) {
   const archetype = insights?.archetype ?? 'homebody';
   const arc = ARCHETYPES[archetype] ?? ARCHETYPES.homebody;
@@ -1631,6 +1689,24 @@ function ProfileTab({ userName, userEmail, transactions, insights, C }: {
         </div>
 
       </div>
+
+      {/* Connect Bank Account */}
+      <div style={{
+        background: C.card,
+        border: `1px solid ${C.border}`,
+        borderRadius: 16,
+        padding: '20px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 18 }}>🏦</span>
+          <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Connected Accounts</p>
+        </div>
+        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
+          Link your bank to automatically import transactions. Uses Plaid — your credentials are never stored.
+        </p>
+        <PlaidLinkButton onSuccess={onRefresh} C={C} />
+      </div>
     </div>
   );
 }
@@ -1935,6 +2011,7 @@ export default function DashboardPage() {
             budgets={budgets}
             insights={insights}
             userName={userName}
+            onRefresh={fetchData}
             C={C}
           />
         )}
@@ -1955,6 +2032,7 @@ export default function DashboardPage() {
             transactions={transactions}
             insights={insights}
             C={C}
+            onRefresh={fetchData}
           />
         )}
       </div>

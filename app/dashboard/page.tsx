@@ -172,12 +172,13 @@ function makeC(isDark: boolean) {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ transactions, budgets, insights, userName, onRefresh, C }: {
+function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onNavigate, C }: {
   transactions: Transaction[];
   budgets: Budget[];
   insights: Insights | null;
   userName: string;
   onRefresh: () => void;
+  onNavigate: (tab: string) => void;
   C: ReturnType<typeof makeC>;
 }) {
   const archetype = insights?.archetype ?? 'homebody';
@@ -219,6 +220,14 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, C }
     return { label: format(d, 'EEE'), key, amount: insights?.dailySpending[key] ?? 0 };
   });
   const maxDaily = Math.max(...days.map(d => d.amount), 1);
+
+  const topCatEntry = Object.entries(totals)
+    .filter(([k]) => k !== 'income')
+    .sort((a, b) => b[1] - a[1])[0];
+  const topCat = topCatEntry ? { id: topCatEntry[0], amount: topCatEntry[1] } : null;
+  const topCatLast = topCat ? (lastTotals[topCat.id] ?? 0) : 0;
+  const topCatTrend = topCat ? trendPct(topCat.amount, topCatLast) : null;
+  const topCatInfo = topCat ? CATEGORIES.find(c => c.id === topCat.id) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
@@ -321,6 +330,35 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, C }
           })}
         </div>
       </div>
+
+      {/* Top spending category callout */}
+      {topCat && (
+        <div style={{
+          background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
+          padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          display: 'flex', alignItems: 'center', gap: 14,
+        }}>
+          <div style={{
+            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
+            background: `${CAT_COLORS[topCat.id] ?? '#94a3b8'}18`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
+          }}>
+            {topCatInfo?.emoji ?? '📦'}
+          </div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: 0.5, marginBottom: 2 }}>TOP CATEGORY THIS MONTH</p>
+            <p style={{ fontSize: 15, fontWeight: 700, color: C.text, textTransform: 'capitalize' }}>{topCatInfo?.label ?? topCat.id}</p>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{fmt(topCat.amount)}</p>
+            {topCatTrend !== null && (
+              <p style={{ fontSize: 11, fontWeight: 700, color: topCatTrend > 0 ? C.red : C.green, marginTop: 2 }}>
+                {topCatTrend > 0 ? '↑' : '↓'}{Math.abs(topCatTrend)}% vs last month
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Archetype Hero Card */}
       <div style={{
@@ -461,7 +499,21 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, C }
         }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Recent</p>
           {recent.length === 0 ? (
-            <p style={{ color: '#94a3b8', fontSize: 13 }}>No transactions yet.</p>
+            <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
+              <div style={{ fontSize: 32 }}>🧾</div>
+              <p style={{ fontSize: 13, fontWeight: 600, color: C.text }}>No transactions yet</p>
+              <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>Log your first purchase to start building your spending profile.</p>
+              <button
+                onClick={() => onNavigate('log')}
+                style={{
+                  marginTop: 4, background: '#16a34a', color: '#fff',
+                  border: 'none', borderRadius: 8, padding: '9px 18px',
+                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                }}
+              >
+                + Add Transaction
+              </button>
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {recent.map((tx, i) => {
@@ -2012,6 +2064,7 @@ export default function DashboardPage() {
             insights={insights}
             userName={userName}
             onRefresh={fetchData}
+            onNavigate={setActiveTab}
             C={C}
           />
         )}

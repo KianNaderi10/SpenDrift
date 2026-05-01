@@ -7,18 +7,18 @@
 }
 
 :root {
-  --bg: #f8fafc;
+  --bg: #fafafa;
   --surface: #ffffff;
   --card: #ffffff;
-  --border: #e2e8f0;
-  --text: #0f172a;
-  --text-muted: #64748b;
-  --accent: #0a0a0a;
+  --border: #e5e5e5;
+  --text: #0a0a0a;
+  --text-muted: #6b6b6b;
+  --accent: #16a34a;
   --accent-text: #ffffff;
   --input-bg: #ffffff;
   --sidebar-bg: #ffffff;
-  --hover-bg: #f1f5f9;
-  --stripe-bg: #f8fafc;
+  --hover-bg: #f5f5f5;
+  --stripe-bg: #fafafa;
 }
 
 [data-theme="dark"] {
@@ -26,9 +26,9 @@
   --surface: #141414;
   --card: #1a1a1a;
   --border: rgba(255,255,255,0.08);
-  --text: #f0f2f8;
-  --text-muted: #64748b;
-  --accent: #ffffff;
+  --text: #fafafa;
+  --text-muted: #8a8a8a;
+  --accent: #22c55e;
   --accent-text: #0a0a0a;
   --input-bg: #1f1f1f;
   --sidebar-bg: #111111;
@@ -37,7 +37,7 @@
 }
 
 html, body {
-  font-family: "Inter", sans-serif;
+  font-family: var(--font-space-grotesk), sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 

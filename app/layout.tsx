@@ -1,7 +1,13 @@
 import type { Metadata } from 'next';
+import { Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { Toaster } from 'sonner';
+
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  variable: '--font-space-grotesk',
+});
 
 export const metadata: Metadata = {
   title: 'Spendrift — Know your spending personality',
@@ -10,14 +16,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" style={{ background: '#08090f' }}>
+    <html lang="en" className={spaceGrotesk.variable} style={{ background: '#08090f' }}>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&display=swap" rel="stylesheet" />
       </head>
-      <body style={{ background: '#08090f', minHeight: '100vh', color: '#f0f2f8', fontFamily: '"Inter", sans-serif' }}>
+      <body style={{ background: '#08090f', minHeight: '100vh', color: '#f0f2f8', fontFamily: 'var(--font-space-grotesk), sans-serif' }}>
         <Providers>
           {children}
           <Toaster

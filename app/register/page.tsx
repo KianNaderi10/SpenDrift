@@ -11,11 +11,11 @@ export default function RegisterPage() {
   const { theme, toggle } = useTheme();
   const isDark = theme === 'dark';
 
-  const bg = isDark ? '#0a0a0a' : '#f8fafc';
+  const bg = isDark ? '#0a0a0a' : '#fafafa';
   const cardBg = isDark ? '#1a1a1a' : '#ffffff';
-  const border = isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0';
-  const text = isDark ? '#f0f2f8' : '#0f172a';
-  const muted = '#64748b';
+  const border = isDark ? 'rgba(255,255,255,0.08)' : '#e5e5e5';
+  const text = isDark ? '#fafafa' : '#0a0a0a';
+  const muted = isDark ? '#8a8a8a' : '#6b6b6b';
   const inputBg = isDark ? '#1f1f1f' : '#ffffff';
 
   const inputStyle: React.CSSProperties = {
@@ -148,8 +148,8 @@ export default function RegisterPage() {
               type="submit"
               disabled={loading}
               style={{
-                background: loading ? '#374151' : isDark ? '#ffffff' : '#0a0a0a',
-                color: isDark ? '#0a0a0a' : '#ffffff',
+                background: loading ? '#6b6b6b' : isDark ? '#22c55e' : '#16a34a',
+                color: '#ffffff',
                 border: 'none',
                 borderRadius: 10,
                 padding: '13px',

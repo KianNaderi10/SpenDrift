@@ -6,6 +6,7 @@ const TransactionSchema = new mongoose.Schema({
   category: { type: String, required: true }, // 'dining', 'groceries', 'coffee', 'entertainment', 'transport', 'shopping', 'health', 'travel', 'bills', 'income', 'other'
   description: { type: String, default: '' },
   date: { type: Date, default: Date.now, index: true },
+  plaidTransactionId: { type: String, default: null, index: true, sparse: true },
 }, { timestamps: true });
 
 export default mongoose.models.Transaction || mongoose.model('Transaction', TransactionSchema);

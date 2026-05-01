@@ -150,18 +150,18 @@ function DonutChart({ totals, C }: { totals: Record<string, number>; C: ReturnTy
 
 function makeC(isDark: boolean) {
   return {
-    bg: isDark ? '#0a0a0a' : '#f8fafc',
+    bg: isDark ? '#0a0a0a' : '#fafafa',
     card: isDark ? '#1a1a1a' : '#ffffff',
-    border: isDark ? 'rgba(255,255,255,0.08)' : '#e2e8f0',
-    text: isDark ? '#f0f2f8' : '#0f172a',
-    muted: '#64748b',
-    accent: isDark ? '#ffffff' : '#0a0a0a',
-    accentText: isDark ? '#0a0a0a' : '#ffffff',
+    border: isDark ? 'rgba(255,255,255,0.08)' : '#e5e5e5',
+    text: isDark ? '#fafafa' : '#0a0a0a',
+    muted: isDark ? '#8a8a8a' : '#6b6b6b',
+    accent: isDark ? '#22c55e' : '#16a34a',
+    accentText: '#ffffff',
     inputBg: isDark ? '#1f1f1f' : '#ffffff',
     sidebarBg: isDark ? '#111111' : '#ffffff',
-    hoverBg: isDark ? 'rgba(255,255,255,0.04)' : '#f1f5f9',
-    stripeBg: isDark ? 'rgba(255,255,255,0.02)' : '#f8fafc',
-    green: '#16a34a',
+    hoverBg: isDark ? 'rgba(255,255,255,0.04)' : '#f5f5f5',
+    stripeBg: isDark ? 'rgba(255,255,255,0.02)' : '#fafafa',
+    green: isDark ? '#22c55e' : '#16a34a',
     red: '#dc2626',
     greenDim: 'rgba(22,163,74,0.12)',
     redDim: 'rgba(220,38,38,0.10)',
@@ -305,7 +305,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         </div>
       </div>
 
-      {/* 7-day spending bar chart */}
+      {/* 7-day spending bar chart — full width */}
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Daily Spending — Last 7 Days</p>
@@ -331,111 +331,56 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         </div>
       </div>
 
-      {/* Top spending category callout */}
-      {topCat && (
-        <div style={{
-          background: C.card, border: `1px solid ${C.border}`, borderRadius: 16,
-          padding: '16px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-          display: 'flex', alignItems: 'center', gap: 14,
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 12, flexShrink: 0,
-            background: `${CAT_COLORS[topCat.id] ?? '#94a3b8'}18`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20,
-          }}>
-            {topCatInfo?.emoji ?? '📦'}
-          </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: 0.5, marginBottom: 2 }}>TOP CATEGORY THIS MONTH</p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: C.text, textTransform: 'capitalize' }}>{topCatInfo?.label ?? topCat.id}</p>
-          </div>
-          <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{fmt(topCat.amount)}</p>
-            {topCatTrend !== null && (
-              <p style={{ fontSize: 11, fontWeight: 700, color: topCatTrend > 0 ? C.red : C.green, marginTop: 2 }}>
-                {topCatTrend > 0 ? '↑' : '↓'}{Math.abs(topCatTrend)}% vs last month
-              </p>
+      {/* Donut + Top category side-by-side */}
+      <div style={{ display: 'grid', gridTemplateColumns: topCat ? '3fr 2fr' : '1fr', gap: 20 }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Spending Breakdown</p>
+          <DonutChart totals={totals} C={C} />
+        </div>
+
+        {topCat && (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Top Category</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div style={{
+                width: 52, height: 52, borderRadius: 14, flexShrink: 0,
+                background: `${CAT_COLORS[topCat.id] ?? '#94a3b8'}18`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24,
+              }}>
+                {topCatInfo?.emoji ?? '📦'}
+              </div>
+              <div>
+                <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: 0.5, marginBottom: 3 }}>THIS MONTH</p>
+                <p style={{ fontSize: 17, fontWeight: 700, color: C.text }}>{topCatInfo?.label ?? topCat.id}</p>
+              </div>
+            </div>
+            <div>
+              <p style={{ fontSize: 28, fontWeight: 800, color: C.text }}>{fmt(topCat.amount)}</p>
+              {topCatTrend !== null && (
+                <p style={{ fontSize: 12, fontWeight: 700, color: topCatTrend > 0 ? C.red : C.green, marginTop: 4 }}>
+                  {topCatTrend > 0 ? '↑' : '↓'} {Math.abs(topCatTrend)}% vs last month
+                </p>
+              )}
+            </div>
+            {/* Mini bar — this cat as share of total */}
+            {totalSpent > 0 && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 11, color: C.muted }}>Share of total spending</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: C.text }}>{Math.round((topCat.amount / totalSpent) * 100)}%</span>
+                </div>
+                <div style={{ height: 5, background: C.hoverBg, borderRadius: 3 }}>
+                  <div style={{ height: '100%', width: `${Math.round((topCat.amount / totalSpent) * 100)}%`, background: CAT_COLORS[topCat.id] ?? '#94a3b8', borderRadius: 3, transition: 'width 0.8s ease' }} />
+                </div>
+              </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* Archetype Hero Card */}
-      <div style={{
-        borderRadius: 16,
-        padding: '20px 24px',
-        background: `${arc.color}22`,
-        borderTop: `1px solid ${arc.color}60`,
-        borderRight: `1px solid ${arc.color}60`,
-        borderBottom: `1px solid ${arc.color}60`,
-        borderLeft: `6px solid ${arc.color}`,
-        boxShadow: `0 4px 16px ${arc.color}20`,
-        position: 'relative',
-        overflow: 'hidden',
-      }}>
-        {/* Watermark emoji */}
-        <div style={{
-          position: 'absolute', right: 20, top: '50%',
-          transform: 'translateY(-50%)',
-          fontSize: 80, opacity: 0.18, pointerEvents: 'none',
-          userSelect: 'none',
-        }}>
-          {arc.emoji}
-        </div>
-
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 14 }}>
-          <div style={{ fontSize: 42, lineHeight: 1 }}>{arc.emoji}</div>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 11, fontWeight: 700, color: arc.color, letterSpacing: 1, marginBottom: 3 }}>YOUR ARCHETYPE</p>
-            <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 5 }}>{arc.name}</h2>
-            <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>{arc.description}</p>
-          </div>
-        </div>
-
-        {arc.next && (
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
-              <span style={{ fontSize: 12, color: C.muted }}>Evolution to {arc.nextName}</span>
-              <span style={{ fontSize: 12, color: arc.color, fontWeight: 700 }}>{progress}%</span>
-            </div>
-            <div style={{ height: 6, background: C.hoverBg, borderRadius: 3 }}>
-              <div style={{ height: '100%', width: `${progress}%`, background: arc.color, borderRadius: 3, transition: 'width 1s ease' }} />
-            </div>
-            <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>{arc.tip}</p>
-          </div>
         )}
-
-        {/* Evolution position */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 7,
-            background: `${arc.color}20`, border: `1px solid ${arc.color}50`,
-            borderRadius: 20, padding: '6px 12px',
-          }}>
-            <span style={{ fontSize: 14 }}>{arc.emoji}</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: arc.color }}>{arc.name}</span>
-          </div>
-          <span style={{ fontSize: 12, color: C.muted }}>
-            #{arcIdx + 1} of {ARCHETYPE_ORDER.length} archetypes
-          </span>
-          {arc.next && (
-            <span style={{ fontSize: 12, color: C.muted }}>
-              · Next: <span style={{ color: C.text, fontWeight: 600 }}>{arc.nextName}</span>
-            </span>
-          )}
-        </div>
       </div>
 
-      {/* Two-column section: Budget bars + Recent transactions */}
+      {/* Budget + Recent Transactions */}
       <div style={{ display: 'grid', gridTemplateColumns: budgets.length === 0 ? '1fr 1fr' : '3fr 2fr', gap: 20 }}>
-        {/* Budget Category Bars */}
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Budget Status</p>
           {budgets.length === 0 ? (
             <div style={{ padding: '20px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, textAlign: 'center' }}>
@@ -444,11 +389,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
               <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>Set spending limits per category to track how you're doing each month.</p>
               <button
                 onClick={() => onNavigate('log')}
-                style={{
-                  marginTop: 4, background: C.accent, color: C.accentText,
-                  border: 'none', borderRadius: 8, padding: '9px 18px',
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                }}
+                style={{ marginTop: 4, background: C.accent, color: C.accentText, border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
               >
                 Set a Budget
               </button>
@@ -470,12 +411,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         {driftPct !== 0 && (
-                          <span style={{
-                            fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20,
-                            background: driftPct > 0 ? C.redDim : C.greenDim,
-                            color: driftPct > 0 ? C.red : C.green,
-                            border: `1px solid ${driftPct > 0 ? 'rgba(220,38,38,0.2)' : 'rgba(22,163,74,0.2)'}`,
-                          }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 20, background: driftPct > 0 ? C.redDim : C.greenDim, color: driftPct > 0 ? C.red : C.green, border: `1px solid ${driftPct > 0 ? 'rgba(220,38,38,0.2)' : 'rgba(22,163,74,0.2)'}` }}>
                             {driftPct > 0 ? '+' : ''}{driftPct}%
                           </span>
                         )}
@@ -483,14 +419,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
                       </div>
                     </div>
                     <div style={{ height: 6, background: C.hoverBg, borderRadius: 3 }}>
-                      <div style={{
-                        height: '100%',
-                        width: `${pct}%`,
-                        background: barColor,
-                        borderRadius: 3,
-                        transition: 'width 0.8s ease',
-                        animation: 'fillBar 0.8s ease',
-                      }} />
+                      <div style={{ height: '100%', width: `${pct}%`, background: barColor, borderRadius: 3, transition: 'width 0.8s ease', animation: 'fillBar 0.8s ease' }} />
                     </div>
                   </div>
                 );
@@ -499,14 +428,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
           )}
         </div>
 
-        {/* Recent Transactions */}
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Recent</p>
           {recent.length === 0 ? (
             <div style={{ padding: '24px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, textAlign: 'center' }}>
@@ -515,11 +437,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
               <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6 }}>Log your first purchase to start building your spending profile.</p>
               <button
                 onClick={() => onNavigate('log')}
-                style={{
-                  marginTop: 4, background: '#16a34a', color: '#fff',
-                  border: 'none', borderRadius: 8, padding: '9px 18px',
-                  fontSize: 13, fontWeight: 700, cursor: 'pointer',
-                }}
+                style={{ marginTop: 4, background: '#16a34a', color: '#fff', border: 'none', borderRadius: 8, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}
               >
                 + Add Transaction
               </button>
@@ -530,17 +448,8 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
                 const cat = CATEGORIES.find(c => c.id === tx.category);
                 const isIncome = tx.amount > 0;
                 return (
-                  <div key={tx._id} style={{
-                    display: 'flex', alignItems: 'center', gap: 10,
-                    padding: '9px 0',
-                    borderBottom: i < recent.length - 1 ? `1px solid ${C.hoverBg}` : 'none',
-                  }}>
-                    <div style={{
-                      width: 34, height: 34, borderRadius: 10,
-                      background: `${CAT_COLORS[tx.category] ?? '#94a3b8'}15`,
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      fontSize: 15, flexShrink: 0,
-                    }}>
+                  <div key={tx._id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < recent.length - 1 ? `1px solid ${C.hoverBg}` : 'none' }}>
+                    <div style={{ width: 34, height: 34, borderRadius: 10, background: `${CAT_COLORS[tx.category] ?? '#94a3b8'}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>
                       {cat?.emoji ?? '📦'}
                     </div>
                     <div style={{ flex: 1, minWidth: 0 }}>
@@ -560,26 +469,43 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         </div>
       </div>
 
-      {/* Donut Chart */}
-      <div style={{
-        background: C.card,
-        border: `1px solid ${C.border}`,
-        borderRadius: 16,
-        padding: '20px 24px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      }}>
-        <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Spending Breakdown</p>
-        <DonutChart totals={totals} C={C} />
+      {/* Archetype Hero Card */}
+      <div style={{ borderRadius: 16, padding: '20px 24px', background: `${arc.color}22`, borderTop: `1px solid ${arc.color}60`, borderRight: `1px solid ${arc.color}60`, borderBottom: `1px solid ${arc.color}60`, borderLeft: `6px solid ${arc.color}`, boxShadow: `0 4px 16px ${arc.color}20`, position: 'relative', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', right: 20, top: '50%', transform: 'translateY(-50%)', fontSize: 80, opacity: 0.18, pointerEvents: 'none', userSelect: 'none' }}>
+          {arc.emoji}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, marginBottom: 14 }}>
+          <div style={{ fontSize: 42, lineHeight: 1 }}>{arc.emoji}</div>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: arc.color, letterSpacing: 1, marginBottom: 3 }}>YOUR ARCHETYPE</p>
+            <h2 style={{ fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 5 }}>{arc.name}</h2>
+            <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>{arc.description}</p>
+          </div>
+        </div>
+        {arc.next && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 7 }}>
+              <span style={{ fontSize: 12, color: C.muted }}>Evolution to {arc.nextName}</span>
+              <span style={{ fontSize: 12, color: arc.color, fontWeight: 700 }}>{progress}%</span>
+            </div>
+            <div style={{ height: 6, background: C.hoverBg, borderRadius: 3 }}>
+              <div style={{ height: '100%', width: `${progress}%`, background: arc.color, borderRadius: 3, transition: 'width 1s ease' }} />
+            </div>
+            <p style={{ fontSize: 12, color: '#94a3b8', marginTop: 8 }}>{arc.tip}</p>
+          </div>
+        )}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: `${arc.color}20`, border: `1px solid ${arc.color}50`, borderRadius: 20, padding: '6px 12px' }}>
+            <span style={{ fontSize: 14 }}>{arc.emoji}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: arc.color }}>{arc.name}</span>
+          </div>
+          <span style={{ fontSize: 12, color: C.muted }}>#{arcIdx + 1} of {ARCHETYPE_ORDER.length} archetypes</span>
+          {arc.next && <span style={{ fontSize: 12, color: C.muted }}>· Next: <span style={{ color: C.text, fontWeight: 600 }}>{arc.nextName}</span></span>}
+        </div>
       </div>
 
       {/* Connect Bank */}
-      <div style={{
-        background: C.card,
-        border: `1px solid ${C.border}`,
-        borderRadius: 16,
-        padding: '20px 24px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      }}>
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 18 }}>🏦</span>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Connect Bank Account</p>
@@ -610,84 +536,157 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
   const maxDaily = Math.max(...days.map(d => d.amount), 1);
   const avgDaily = days.reduce((s, d) => s + d.amount, 0) / 7;
 
-  const cats = Object.keys({ ...thisMonthTotals, ...lastMonthTotals }).filter(k => k !== 'income');
+  // Only show categories with spend in at least one month
+  const cats = Object.keys({ ...thisMonthTotals, ...lastMonthTotals })
+    .filter(k => k !== 'income' && ((thisMonthTotals[k] ?? 0) > 0 || (lastMonthTotals[k] ?? 0) > 0));
 
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
-      {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+  const totalSpentThis = Object.entries(thisMonthTotals).filter(([k]) => k !== 'income').reduce((s, [, v]) => s + v, 0);
+  const totalSpentLast = Object.entries(lastMonthTotals).filter(([k]) => k !== 'income').reduce((s, [, v]) => s + v, 0);
+  const overallDrift = totalSpentLast > 0 ? Math.round(((totalSpentThis - totalSpentLast) / totalSpentLast) * 100) : null;
+
+  const peakDay = days.reduce((best, d) => d.amount > best.amount ? d : best, days[0]);
+  const quietDay = days.filter(d => d.amount > 0).reduce((low, d) => d.amount < low.amount ? d : low, days.filter(d => d.amount > 0)[0] ?? days[0]);
+
+  // End-of-month projection
+  const today = new Date();
+  const dayOfMonth = today.getDate();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const dailyAvgThisMonth = dayOfMonth > 0 ? totalSpentThis / dayOfMonth : 0;
+  const projectedTotal = Math.round(dailyAvgThisMonth * daysInMonth);
+  const daysLeft = daysInMonth - dayOfMonth;
+
+  // Cumulative pace: how much had been spent by this day last month
+  // Approximate: last month total × (dayOfMonth / daysInLastMonth)
+  const daysInLastMonth = new Date(today.getFullYear(), today.getMonth(), 0).getDate();
+  const lastMonthPaceAtThisPoint = totalSpentLast > 0 ? Math.round(totalSpentLast * (dayOfMonth / daysInLastMonth)) : 0;
+
+  // Savings rate
+  const incomeThis = thisMonthTotals['income'] ?? 0;
+  const incomeLast = lastMonthTotals['income'] ?? 0;
+  const savingsRateThis = incomeThis > 0 ? Math.round(((incomeThis - totalSpentThis) / incomeThis) * 100) : null;
+  const savingsRateLast = incomeLast > 0 ? Math.round(((incomeLast - totalSpentLast) / incomeLast) * 100) : null;
+
+  // Category max for bar scaling
+  const catMax = Math.max(...cats.map(c => Math.max(thisMonthTotals[c] ?? 0, lastMonthTotals[c] ?? 0)), 1);
+
+  // Logging streak — count consecutive days with spend going back from today
+  const streak = (() => {
+    let count = 0;
+    for (let i = 0; i < 31; i++) {
+      const key = format(subDays(new Date(), i), 'yyyy-MM-dd');
+      if ((dailySpending[key] ?? 0) > 0) count++;
+      else break;
+    }
+    return count;
+  })();
+
+  const hasNoData = totalSpentThis === 0 && Object.keys(dailySpending).length === 0;
+
+  if (hasNoData) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
         <div>
           <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>SPENDING DRIFT</p>
           <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Drift Report</h1>
         </div>
-        <div style={{
-          background: C.hoverBg,
-          border: `1px solid ${C.border}`,
-          borderRadius: 20,
-          padding: '5px 14px',
-          fontSize: 12,
-          color: C.muted,
-          fontWeight: 600,
-        }}>
-          {format(subDays(new Date(), 6), 'MMM d')} – {format(new Date(), 'MMM d')}
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '48px 32px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center', gap: 14 }}>
+          <div style={{ fontSize: 40 }}>📉</div>
+          <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>No drift data yet</p>
+          <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.7, maxWidth: 360 }}>
+            Log at least a few transactions to start seeing your spending trends, daily patterns, and month-over-month drift.
+          </p>
+          <p style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Head to the <strong>Log</strong> tab to add your first transaction.</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>SPENDING DRIFT</p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Drift Report</h1>
+          {/* Headline summary */}
+          {totalSpentThis > 0 && (
+            <p style={{ fontSize: 14, color: C.muted, marginTop: 6, lineHeight: 1.6 }}>
+              You&apos;ve spent{' '}
+              <span style={{ color: C.text, fontWeight: 700 }}>{fmt(totalSpentThis)}</span>
+              {' '}this month
+              {overallDrift !== null && (
+                <span style={{ color: overallDrift > 0 ? C.red : C.green, fontWeight: 700 }}>
+                  {' '}{overallDrift > 0 ? '↑' : '↓'}{Math.abs(overallDrift)}% vs last month
+                </span>
+              )}
+              .
+            </p>
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+          {streak > 0 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 20, padding: '5px 12px' }}>
+              <span style={{ fontSize: 13 }}>🔥</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#f59e0b' }}>{streak}-day streak</span>
+            </div>
+          )}
+          <div style={{ background: C.hoverBg, border: `1px solid ${C.border}`, borderRadius: 20, padding: '5px 14px', fontSize: 12, color: C.muted, fontWeight: 600 }}>
+            {format(subDays(new Date(), 6), 'MMM d')} – {format(new Date(), 'MMM d')}
+          </div>
         </div>
       </div>
 
-      {/* Insight Cards — 3 across */}
-      {topInsights.length > 0 && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
-          {topInsights.map((ins, i) => {
-            const catInfo = CATEGORIES.find(c => c.id === ins.category);
-            const up = ins.drift > 0;
-            const borderColor = up ? C.red : C.green;
-            return (
-              <div key={i} style={{
-                background: C.card,
-                borderTop: `1px solid ${C.border}`,
-                borderRight: `1px solid ${C.border}`,
-                borderBottom: `1px solid ${C.border}`,
-                borderLeft: `4px solid ${borderColor}`,
-                borderRadius: 16,
-                padding: '18px 20px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                  <div style={{
-                    width: 40, height: 40, borderRadius: 12,
-                    background: up ? C.redDim : C.greenDim,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 18,
-                  }}>
-                    {catInfo?.emoji ?? '📦'}
-                  </div>
-                  <div>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, textTransform: 'capitalize' }}>{ins.category}</p>
-                    <p style={{ fontSize: 11, color: '#94a3b8' }}>{fmt(ins.thisMonth)} this mo.</p>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span style={{ fontSize: 28, fontWeight: 800, color: up ? C.red : C.green }}>
-                    {up ? '+' : ''}{ins.drift}%
-                  </span>
-                  <span style={{ fontSize: 12, color: '#94a3b8' }}>vs last month</span>
-                </div>
-                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
-                  {up ? '↑' : '↓'} {fmt(Math.abs(ins.thisMonth - ins.lastMonth))} {up ? 'more' : 'less'}
+      {/* Projection + Pace + Savings rate — stat row */}
+      {totalSpentThis > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: savingsRateThis !== null ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: 14 }}>
+          {/* End-of-month projection */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: 0.5, marginBottom: 8 }}>PROJECTED MONTH TOTAL</p>
+            <p style={{ fontSize: 22, fontWeight: 800, color: totalSpentLast > 0 && projectedTotal > totalSpentLast ? C.red : C.text }}>
+              {fmt(projectedTotal)}
+            </p>
+            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+              {daysLeft} day{daysLeft !== 1 ? 's' : ''} left · avg {fmt(Math.round(dailyAvgThisMonth))}/day
+            </p>
+            {totalSpentLast > 0 && (
+              <p style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: projectedTotal > totalSpentLast ? C.red : C.green }}>
+                {projectedTotal > totalSpentLast ? '↑' : '↓'} {Math.abs(Math.round(((projectedTotal - totalSpentLast) / totalSpentLast) * 100))}% vs last month&apos;s {fmt(totalSpentLast)}
+              </p>
+            )}
+          </div>
+
+          {/* Cumulative pace */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: 0.5, marginBottom: 8 }}>PACE vs LAST MONTH</p>
+            <p style={{ fontSize: 22, fontWeight: 800, color: C.text }}>{fmt(totalSpentThis)}</p>
+            <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>by day {dayOfMonth} this month</p>
+            {lastMonthPaceAtThisPoint > 0 && (
+              <p style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: totalSpentThis > lastMonthPaceAtThisPoint ? C.red : C.green }}>
+                {totalSpentThis > lastMonthPaceAtThisPoint ? '↑' : '↓'} {fmt(Math.abs(totalSpentThis - lastMonthPaceAtThisPoint))} {totalSpentThis > lastMonthPaceAtThisPoint ? 'ahead of' : 'behind'} last month&apos;s pace
+              </p>
+            )}
+          </div>
+
+          {/* Savings rate */}
+          {savingsRateThis !== null && (
+            <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+              <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, letterSpacing: 0.5, marginBottom: 8 }}>SAVINGS RATE</p>
+              <p style={{ fontSize: 22, fontWeight: 800, color: savingsRateThis >= 0 ? C.green : C.red }}>
+                {savingsRateThis}%
+              </p>
+              <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>of income saved this month</p>
+              {savingsRateLast !== null && (
+                <p style={{ fontSize: 11, fontWeight: 700, marginTop: 4, color: savingsRateThis >= savingsRateLast ? C.green : C.red }}>
+                  {savingsRateThis >= savingsRateLast ? '↑' : '↓'} {Math.abs(savingsRateThis - savingsRateLast)}pp vs last month&apos;s {savingsRateLast}%
                 </p>
-              </div>
-            );
-          })}
+              )}
+            </div>
+          )}
         </div>
       )}
 
-      {/* Daily Bar Chart */}
-      <div style={{
-        background: C.card,
-        border: `1px solid ${C.border}`,
-        borderRadius: 16,
-        padding: '24px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      }}>
+      {/* Daily Bar Chart — first for context */}
+      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Daily Spending — Last 7 Days</p>
           <div style={{ display: 'flex', gap: 16, fontSize: 11 }}>
@@ -701,10 +700,7 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
             </span>
           </div>
         </div>
-
-        {/* Chart area */}
         <div style={{ display: 'flex', gap: 16 }}>
-          {/* Y-axis */}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', paddingBottom: 36, width: 48, flexShrink: 0 }}>
             {[maxDaily, maxDaily * 0.75, maxDaily * 0.5, maxDaily * 0.25, 0].map((v, i) => (
               <span key={i} style={{ fontSize: 10, color: '#94a3b8', textAlign: 'right', lineHeight: 1 }}>
@@ -712,38 +708,18 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
               </span>
             ))}
           </div>
-
-          {/* Bars + grid */}
           <div style={{ flex: 1, position: 'relative' }}>
-            {/* Horizontal grid lines */}
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 36, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', pointerEvents: 'none' }}>
               {[0, 1, 2, 3, 4].map(i => (
                 <div key={i} style={{ height: 1, background: C.border, opacity: 0.6 }} />
               ))}
             </div>
-
-            {/* Average line */}
             {avgDaily > 0 && (
-              <div style={{
-                position: 'absolute',
-                left: 0, right: 0,
-                bottom: 36 + ((avgDaily / maxDaily) * 200),
-                height: 1,
-                background: '#f59e0b',
-                borderTop: '1.5px dashed #f59e0b',
-                opacity: 0.7,
-                pointerEvents: 'none',
-                zIndex: 2,
-              }}>
-                <span style={{
-                  position: 'absolute', right: 0, top: -18,
-                  fontSize: 9, color: '#f59e0b', fontWeight: 700, whiteSpace: 'nowrap',
-                }}>avg {fmt(Math.round(avgDaily))}</span>
+              <div style={{ position: 'absolute', left: 0, right: 0, bottom: 36 + ((avgDaily / maxDaily) * 200), height: 1, background: '#f59e0b', borderTop: '1.5px dashed #f59e0b', opacity: 0.7, pointerEvents: 'none', zIndex: 2 }}>
+                <span style={{ position: 'absolute', right: 0, top: -18, fontSize: 9, color: '#f59e0b', fontWeight: 700, whiteSpace: 'nowrap' }}>avg {fmt(Math.round(avgDaily))}</span>
               </div>
             )}
-
-            {/* Bars */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 200, paddingBottom: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-end', gap: 10, height: 200 }}>
               {days.map(d => {
                 const barH = d.amount > 0 ? Math.max(8, (d.amount / maxDaily) * 200) : 4;
                 const isToday = d.key === format(new Date(), 'yyyy-MM-dd');
@@ -751,43 +727,22 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
                 const barColor = isToday ? C.accent : isOver ? C.red : d.amount > 0 ? C.green : C.border;
                 return (
                   <div key={d.key} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0 }}>
-                    {/* Amount label above bar */}
-                    <span style={{
-                      fontSize: 10, fontWeight: 700,
-                      color: d.amount > 0 ? (isOver ? C.red : C.green) : 'transparent',
-                      marginBottom: 4, whiteSpace: 'nowrap',
-                    }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: d.amount > 0 ? (isOver ? C.red : C.green) : 'transparent', marginBottom: 4, whiteSpace: 'nowrap' }}>
                       {d.amount > 0 ? fmt(d.amount) : ''}
                     </span>
-                    {/* Bar */}
-                    <div style={{
-                      width: '100%',
-                      height: barH,
-                      background: d.amount > 0
-                        ? `linear-gradient(to top, ${barColor}cc, ${barColor})`
-                        : C.border,
-                      borderRadius: '6px 6px 2px 2px',
-                      transition: 'height 0.6s ease',
-                      boxShadow: d.amount > 0 ? `0 4px 12px ${barColor}40` : 'none',
-                      cursor: 'default',
-                    }}
+                    <div style={{ width: '100%', height: barH, background: d.amount > 0 ? `linear-gradient(to top, ${barColor}cc, ${barColor})` : C.border, borderRadius: '6px 6px 2px 2px', transition: 'height 0.6s ease', boxShadow: d.amount > 0 ? `0 4px 12px ${barColor}40` : 'none' }}
                       title={d.amount > 0 ? `${d.label}: ${fmt(d.amount)}` : `${d.label}: $0`}
                     />
                   </div>
                 );
               })}
             </div>
-
-            {/* X-axis labels */}
             <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
               {days.map(d => {
                 const isToday = d.key === format(new Date(), 'yyyy-MM-dd');
                 return (
                   <div key={d.key} style={{ flex: 1, textAlign: 'center' }}>
-                    <span style={{
-                      fontSize: 12, fontWeight: isToday ? 700 : 500,
-                      color: isToday ? C.text : C.muted,
-                    }}>{d.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: isToday ? 700 : 500, color: isToday ? C.text : C.muted }}>{d.label}</span>
                     {isToday && <div style={{ width: 4, height: 4, borderRadius: '50%', background: C.accent, margin: '3px auto 0' }} />}
                   </div>
                 );
@@ -795,8 +750,6 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
             </div>
           </div>
         </div>
-
-        {/* Footer summary */}
         {days.some(d => d.amount > 0) && (
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20, paddingTop: 16, borderTop: `1px solid ${C.hoverBg}` }}>
             <span style={{ fontSize: 12, color: '#94a3b8' }}>7-day total: <strong style={{ color: C.text }}>{fmt(days.reduce((s, d) => s + d.amount, 0))}</strong></span>
@@ -805,55 +758,89 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
         )}
       </div>
 
-      {/* vs Last Month Table */}
+      {/* Insight Cards — biggest drifters */}
+      {topInsights.length > 0 && (
+        <div>
+        <p style={{ fontSize: 12, color: '#94a3b8', fontWeight: 700, letterSpacing: 1, marginBottom: 12 }}>BIGGEST CHANGES</p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 14 }}>
+          {topInsights.map((ins, i) => {
+            const catInfo = CATEGORIES.find(c => c.id === ins.category);
+            const up = ins.drift > 0;
+            return (
+              <div key={i} style={{ background: C.card, borderTop: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}`, borderLeft: `4px solid ${up ? C.red : C.green}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: up ? C.redDim : C.greenDim, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
+                    {catInfo?.emoji ?? '📦'}
+                  </div>
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.text, textTransform: 'capitalize' }}>{ins.category}</p>
+                    <p style={{ fontSize: 11, color: '#94a3b8' }}>{fmt(ins.thisMonth)} this mo.</p>
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                  <span style={{ fontSize: 28, fontWeight: 800, color: up ? C.red : C.green }}>{up ? '+' : ''}{ins.drift}%</span>
+                  <span style={{ fontSize: 12, color: '#94a3b8' }}>vs last month</span>
+                </div>
+                <p style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>
+                  {up ? '↑' : '↓'} {fmt(Math.abs(ins.thisMonth - ins.lastMonth))} {up ? 'more' : 'less'}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        </div>
+      )}
+
+      {/* Category comparison — visual paired bars */}
       {cats.length > 0 && (
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '20px 24px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
-          <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>vs Last Month</p>
-          <div>
-            {/* Header row */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1fr 1fr 80px',
-              padding: '6px 10px 10px',
-              borderBottom: `2px solid ${C.border}`,
-            }}>
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, letterSpacing: 0.5 }}>CATEGORY</span>
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textAlign: 'right', letterSpacing: 0.5 }}>THIS MO.</span>
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textAlign: 'right', letterSpacing: 0.5 }}>LAST MO.</span>
-              <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 700, textAlign: 'right', letterSpacing: 0.5 }}>CHANGE</span>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Category Breakdown</p>
+            <div style={{ display: 'flex', gap: 14, fontSize: 11 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: C.accent, display: 'inline-block' }} />
+                <span style={{ color: C.muted }}>This month</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, background: C.muted, display: 'inline-block', opacity: 0.4 }} />
+                <span style={{ color: C.muted }}>Last month</span>
+              </span>
             </div>
-            {cats.map((cat, i) => {
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {cats.sort((a, b) => (thisMonthTotals[b] ?? 0) - (thisMonthTotals[a] ?? 0)).map(cat => {
               const t = thisMonthTotals[cat] ?? 0;
               const l = lastMonthTotals[cat] ?? 0;
               const d = drift[cat] ?? 0;
               const catInfo = CATEGORIES.find(c => c.id === cat);
+              const thisW = (t / catMax) * 100;
+              const lastW = (l / catMax) * 100;
               return (
-                <div key={cat} style={{
-                  display: 'grid',
-                  gridTemplateColumns: '2fr 1fr 1fr 80px',
-                  padding: '10px 10px',
-                  background: i % 2 === 0 ? C.stripeBg : C.card,
-                  borderRadius: 8,
-                  alignItems: 'center',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 15 }}>{catInfo?.emoji ?? '📦'}</span>
-                    <span style={{ fontSize: 13, color: C.text, fontWeight: 500, textTransform: 'capitalize' }}>{cat}</span>
+                <div key={cat}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      <span style={{ fontSize: 14 }}>{catInfo?.emoji ?? '📦'}</span>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: C.text, textTransform: 'capitalize' }}>{catInfo?.label ?? cat}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{ fontSize: 12, color: C.muted }}>{fmt(l)}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>→ {fmt(t)}</span>
+                      {d !== 0 && (
+                        <span style={{ fontSize: 11, fontWeight: 700, color: d > 0 ? C.red : C.green, minWidth: 44, textAlign: 'right' }}>
+                          {d > 0 ? '↑' : '↓'}{Math.abs(d)}%
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: C.text, textAlign: 'right' }}>{fmt(t)}</span>
-                  <span style={{ fontSize: 13, color: '#94a3b8', textAlign: 'right' }}>{fmt(l)}</span>
-                  <span style={{
-                    fontSize: 12, fontWeight: 700, textAlign: 'right',
-                    color: d > 0 ? C.red : d < 0 ? C.green : '#94a3b8',
-                  }}>
-                    {d > 0 ? '↑' : d < 0 ? '↓' : ''} {d !== 0 ? `${Math.abs(d)}%` : '—'}
-                  </span>
+                  {/* Stacked bars */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                    <div style={{ height: 7, background: C.hoverBg, borderRadius: 4 }}>
+                      <div style={{ height: '100%', width: `${thisW}%`, background: CAT_COLORS[cat] ?? C.accent, borderRadius: 4, transition: 'width 0.7s ease' }} />
+                    </div>
+                    <div style={{ height: 5, background: C.hoverBg, borderRadius: 4 }}>
+                      <div style={{ height: '100%', width: `${lastW}%`, background: CAT_COLORS[cat] ?? C.muted, borderRadius: 4, opacity: 0.35, transition: 'width 0.7s ease' }} />
+                    </div>
+                  </div>
                 </div>
               );
             })}
@@ -861,18 +848,12 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
         </div>
       )}
 
-      {/* Pattern Cards — 2 side by side */}
+      {/* Pattern Cards — Weekend + Peak Day */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '18px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
             <span style={{ fontSize: 22 }}>📅</span>
-            <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Weekend Pattern</p>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Weekend Pattern</p>
           </div>
           {weekendDiff !== 0 ? (
             <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
@@ -886,28 +867,24 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
             <p style={{ fontSize: 13, color: '#94a3b8' }}>Log more transactions to detect patterns.</p>
           )}
         </div>
-        <div style={{
-          background: C.card,
-          border: `1px solid ${C.border}`,
-          borderRadius: 16,
-          padding: '18px 20px',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-        }}>
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-            <span style={{ fontSize: 22 }}>📊</span>
-            <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Category Drift</p>
+            <span style={{ fontSize: 22 }}>📈</span>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Peak Day</p>
           </div>
-          {topInsights.length > 0 ? (
+          {peakDay && peakDay.amount > 0 ? (
             <p style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
-              Biggest change:{' '}
-              <span style={{ fontWeight: 700, color: C.text, textTransform: 'capitalize' }}>{topInsights[0].category}</span>
-              {' '}
-              <span style={{ color: topInsights[0].drift > 0 ? C.red : C.green, fontWeight: 700 }}>
-                {topInsights[0].drift > 0 ? '+' : ''}{topInsights[0].drift}%
-              </span>
+              Your biggest day this week was{' '}
+              <span style={{ color: C.text, fontWeight: 700 }}>{peakDay.label}</span>
+              {' '}at{' '}
+              <span style={{ color: C.red, fontWeight: 700 }}>{fmt(peakDay.amount)}</span>
+              {quietDay && quietDay.key !== peakDay.key && (
+                <> — lightest was <span style={{ color: C.text, fontWeight: 700 }}>{quietDay.label}</span> at <span style={{ color: C.green, fontWeight: 700 }}>{fmt(quietDay.amount)}</span></>
+              )}
+              .
             </p>
           ) : (
-            <p style={{ fontSize: 13, color: '#94a3b8' }}>No notable drift detected yet.</p>
+            <p style={{ fontSize: 13, color: '#94a3b8' }}>Log transactions this week to see your peak spending day.</p>
           )}
         </div>
       </div>

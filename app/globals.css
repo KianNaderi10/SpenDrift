@@ -37,7 +37,7 @@
 }
 
 html, body {
-  font-family: "Boogaloo", sans-serif;
+  font-family: "Inter", sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -69,6 +69,103 @@ button:active {
 ::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.12);
   border-radius: 2px;
+}
+
+@media (max-width: 768px) {
+  .scroll-reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+
+  .mobile-hide { display: none !important; }
+
+  .landing-nav { padding: 0 20px !important; }
+
+  .landing-hero { padding: 64px 24px 48px !important; }
+
+  .landing-h1 { font-size: 36px !important; letter-spacing: -1px !important; }
+
+  .landing-subtext { font-size: 17px !important; }
+
+  .landing-ctas { flex-direction: column !important; }
+  .landing-ctas a { text-align: center !important; }
+
+  .stats-bar { flex-wrap: wrap !important; }
+  .stat-cell { flex: 1 0 50% !important; padding: 20px 16px !important; }
+  .stat-cell:nth-child(2) { border-right: none !important; }
+  .stat-cell:nth-child(1), .stat-cell:nth-child(2) { border-bottom: 1px solid var(--border) !important; }
+  .stat-value { font-size: 26px !important; }
+
+  .steps-grid { grid-template-columns: 1fr !important; }
+  .features-grid { grid-template-columns: 1fr !important; }
+  .archetypes-grid { grid-template-columns: 1fr !important; }
+
+  .landing-cta-band { padding: 60px 24px !important; }
+  .landing-cta-h2 { font-size: 30px !important; letter-spacing: -0.5px !important; }
+  .landing-cta-p { font-size: 16px !important; }
+
+  .footer-main { flex-direction: column !important; align-items: flex-start !important; }
+  .footer-bottom { flex-direction: column !important; align-items: flex-start !important; }
+}
+
+@keyframes ticker-left {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+@keyframes ticker-right {
+  0%   { transform: translateX(-50%); }
+  100% { transform: translateX(0); }
+}
+.ticker-track-left {
+  display: flex;
+  width: max-content;
+  gap: 12px;
+  animation: ticker-left 35s linear infinite;
+}
+.ticker-track-right {
+  display: flex;
+  width: max-content;
+  gap: 12px;
+  animation: ticker-right 35s linear infinite;
+}
+.ticker-track-left:hover,
+.ticker-track-right:hover {
+  animation-play-state: paused;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.scroll-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.scroll-reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.landing-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.landing-card:hover {
+  transform: translateY(-4px);
+}
+.landing-card:active {
+  transform: scale(0.97);
+  transition: transform 0.1s ease;
+}
+
+.cta-btn {
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+.cta-btn:active {
+  transform: scale(0.96);
+  opacity: 0.9;
 }
 
 @keyframes blink {

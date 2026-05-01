@@ -12,11 +12,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" style={{ background: '#08090f' }}>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Boogaloo&display=swap" rel="stylesheet" />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400..800&display=swap" rel="stylesheet" />
       </head>
-      <body style={{ background: '#08090f', minHeight: '100vh', color: '#f0f2f8', fontFamily: '"Boogaloo", sans-serif' }}>
+      <body style={{ background: '#08090f', minHeight: '100vh', color: '#f0f2f8', fontFamily: '"Inter", sans-serif' }}>
         <Providers>
           {children}
           <Toaster

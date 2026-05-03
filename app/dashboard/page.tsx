@@ -1024,7 +1024,7 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
       </div>
 
       {/* Two-column layout */}
-      <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+      <div className="log-layout" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
 
       {/* Form */}
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -1105,7 +1105,7 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
           {!isIncome && (
             <div>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 10 }}>Category</label>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+              <div className="log-cat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
                 {CATEGORIES.filter(c => c.id !== 'income').map(c => (
                   <button
                     key={c.id}
@@ -1125,7 +1125,9 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
                     }}
                   >
                     <span style={{ fontSize: 20 }}>{c.emoji}</span>
-                    <span style={{ fontSize: 10, color: category === c.id ? (CAT_COLORS[c.id] ?? C.accent) : C.muted, fontWeight: 600 }}>{c.label}</span>
+                    <span className="log-cat-label" style={{ fontSize: 10, color: category === c.id ? (CAT_COLORS[c.id] ?? C.accent) : C.muted, fontWeight: 600, textAlign: 'center', lineHeight: 1.2 }}>
+                      {c.label}
+                    </span>
                   </button>
                 ))}
               </div>
@@ -1255,7 +1257,7 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
       </div>
 
       {/* Right Panel */}
-      <div style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div className="log-right-panel" style={{ width: 320, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 16 }}>
 
         {/* Archetype Tip */}
         <div style={{

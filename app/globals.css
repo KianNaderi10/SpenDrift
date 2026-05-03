@@ -206,7 +206,15 @@ button:active {
 
 /* Profile page responsive grids */
 @media (max-width: 767px) {
-  .profile-main-grid  { grid-template-columns: 1fr !important; }
-  .profile-stats-grid { grid-template-columns: 1fr 1fr !important; }
+  .profile-main-grid   { grid-template-columns: 1fr !important; }
+  .profile-stats-grid  { grid-template-columns: 1fr 1fr !important; }
   .profile-badges-grid { grid-template-columns: repeat(3, 1fr) !important; }
+}
+
+/* Log expense page responsive layout */
+@media (max-width: 767px) {
+  .log-layout      { flex-direction: column !important; }
+  .log-right-panel { width: 100% !important; }
+  .log-cat-grid    { grid-template-columns: repeat(5, 1fr) !important; gap: 6px !important; }
+  .log-cat-label   { font-size: 9px !important; }
 }

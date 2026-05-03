@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSession, signOut } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
@@ -894,19 +894,48 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
 
 // ─── Log Tab ──────────────────────────────────────────────────────────────────
 
-function LogTab({ onLogged, budgets, insights, transactions, C }: {
+function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
   onLogged: () => void;
   budgets: Budget[];
   insights: Insights | null;
   transactions: Transaction[];
+  onNavigate: (tab: string) => void;
   C: ReturnType<typeof makeC>;
 }) {
   const [amount, setAmount] = useState('');
   const [category, setCategory] = useState('dining');
   const [description, setDescription] = useState('');
-  const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const today = format(new Date(), 'yyyy-MM-dd');
+  const [date, setDate] = useState(today);
+  const [showDatePicker, setShowDatePicker] = useState(false);
   const [isIncome, setIsIncome] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const amountRef = useRef<HTMLInputElement>(null);
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    const res = await fetch(`/api/transactions/${id}`, { method: 'DELETE' });
+    setDeletingId(null);
+    if (res.ok) {
+      onLogged();
+    } else {
+      toast.error('Failed to delete transaction');
+    }
+  }
+
+  const DESC_SUGGESTIONS: Record<string, string[]> = {
+    dining:        ['Lunch', 'Dinner', 'Takeout', 'Restaurant'],
+    groceries:     ['Weekly shop', 'Supermarket', 'Corner store', 'Essentials'],
+    coffee:        ['Morning coffee', 'Latte', 'Café', 'Espresso'],
+    entertainment: ['Movie', 'Concert', 'Streaming', 'Night out'],
+    transport:     ['Uber / Lyft', 'Gas', 'Parking', 'Bus / Train'],
+    shopping:      ['Clothes', 'Online order', 'Gift', 'Accessories'],
+    health:        ['Gym', 'Pharmacy', 'Doctor visit', 'Supplements'],
+    travel:        ['Flight', 'Hotel', 'Airbnb', 'Activities'],
+    bills:         ['Rent', 'Electricity', 'Internet', 'Phone'],
+    other:         ['Miscellaneous', 'ATM / Cash', 'Subscription', 'Other'],
+  };
 
   async function handleLog(e: React.FormEvent) {
     e.preventDefault();
@@ -950,8 +979,10 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
 
     setAmount('');
     setDescription('');
-    setDate(format(new Date(), 'yyyy-MM-dd'));
+    setDate(today);
+    setShowDatePicker(false);
     onLogged();
+    setTimeout(() => amountRef.current?.focus(), 50);
   }
 
   const inputStyle: React.CSSProperties = {
@@ -969,13 +1000,26 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
   const recentLogs = transactions.slice(0, 8);
   const archetype = insights?.archetype ?? 'homebody';
   const arc = ARCHETYPES[archetype] ?? ARCHETYPES.homebody;
+  const thisMonthTotal = Object.entries(insights?.thisMonthTotals ?? {})
+    .filter(([cat]) => cat !== 'income')
+    .reduce((s, [, v]) => s + v, 0);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
       {/* Header */}
-      <div>
-        <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>NEW ENTRY</p>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Log Transaction</h1>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div>
+          <p style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>NEW ENTRY</p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Log Transaction</h1>
+        </div>
+        {thisMonthTotal > 0 && (
+          <div style={{ textAlign: 'right', paddingBottom: 2 }}>
+            <p style={{ fontSize: 11, color: C.muted, fontWeight: 600, marginBottom: 2, letterSpacing: 0.5 }}>THIS MONTH</p>
+            <p style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: '-0.5px' }}>
+              ${(thisMonthTotal / 100).toFixed(0)}
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Two-column layout */}
@@ -1025,6 +1069,7 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
                 fontSize: 16, color: C.muted, fontWeight: 700, pointerEvents: 'none',
               }}>$</span>
               <input
+                ref={amountRef}
                 type="number"
                 step="0.01"
                 min="0.01"
@@ -1034,6 +1079,24 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
                 placeholder="0.00"
                 style={{ ...inputStyle, paddingLeft: 30, fontSize: 18, fontWeight: 700 }}
               />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              {[5, 10, 20, 50].map(val => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setAmount(String(val))}
+                  style={{
+                    flex: 1, padding: '7px 0', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${amount === String(val) ? C.accent : C.border}`,
+                    background: amount === String(val) ? `${C.accent}15` : C.inputBg,
+                    color: amount === String(val) ? C.accent : C.muted,
+                    fontSize: 13, fontWeight: 700, transition: 'all 0.15s',
+                  }}
+                >
+                  ${val}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1065,12 +1128,41 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
                   </button>
                 ))}
               </div>
+              {/* Live budget bar for selected category */}
+              {(() => {
+                const budget = budgets.find(b => b.category === category);
+                if (!budget) return null;
+                const spent = insights?.thisMonthTotals[category] ?? 0;
+                const pct = Math.min((spent / budget.limit) * 100, 100);
+                const barColor = pct >= 100 ? C.red : pct >= 80 ? C.amber : C.green;
+                const catLabel = CATEGORIES.find(c => c.id === category)?.label ?? category;
+                return (
+                  <div style={{ marginTop: 12, padding: '10px 12px', background: C.hoverBg, borderRadius: 10 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontSize: 11, color: C.muted, fontWeight: 600 }}>{catLabel} this month</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: barColor }}>
+                        ${(spent / 100).toFixed(0)} / ${(budget.limit / 100).toFixed(0)}
+                      </span>
+                    </div>
+                    <div style={{ height: 4, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                    </div>
+                    {pct >= 80 && (
+                      <p style={{ fontSize: 10, color: barColor, fontWeight: 600, marginTop: 5 }}>
+                        {pct >= 100 ? '🚨 Over budget' : `⚠️ ${Math.round(pct)}% used — ${Math.round(100 - pct)}% remaining`}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
           {/* Description */}
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 7 }}>Description <span style={{ color: '#94a3b8', fontWeight: 400 }}>(optional)</span></label>
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 7 }}>
+              Description <span style={{ color: C.muted, fontWeight: 400 }}>(optional)</span>
+            </label>
             <input
               type="text"
               value={description}
@@ -1078,18 +1170,66 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
               placeholder="What was this for?"
               style={inputStyle}
             />
+            {!isIncome && (DESC_SUGGESTIONS[category] ?? []).length > 0 && (
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                {(DESC_SUGGESTIONS[category] ?? []).map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setDescription(s)}
+                    style={{
+                      padding: '4px 10px', borderRadius: 20, cursor: 'pointer', fontSize: 12, fontWeight: 600,
+                      border: `1px solid ${description === s ? C.accent : C.border}`,
+                      background: description === s ? `${C.accent}15` : C.inputBg,
+                      color: description === s ? C.accent : C.muted,
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Date */}
           <div>
-            <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 7 }}>Date</label>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              required
-              style={inputStyle}
-            />
+            {!showDatePicker && date === today ? (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <span style={{ fontSize: 13, color: C.muted, fontWeight: 600 }}>
+                  📅 Today — {format(new Date(), 'MMM d, yyyy')}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowDatePicker(true)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: C.accent, fontWeight: 700, padding: 0 }}
+                >
+                  Change date →
+                </button>
+              </div>
+            ) : (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 7 }}>
+                  <label style={{ fontSize: 13, fontWeight: 600, color: C.text }}>Date</label>
+                  {date !== today && (
+                    <button
+                      type="button"
+                      onClick={() => { setDate(today); setShowDatePicker(false); }}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: C.muted, fontWeight: 600, padding: 0 }}
+                    >
+                      ← Back to today
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="date"
+                  value={date}
+                  onChange={e => setDate(e.target.value)}
+                  required
+                  style={inputStyle}
+                />
+              </div>
+            )}
           </div>
 
           {/* Submit */}
@@ -1097,8 +1237,8 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
             type="submit"
             disabled={loading}
             style={{
-              background: loading ? '#374151' : C.accent,
-              color: C.accentText,
+              background: loading ? C.muted : C.accent,
+              color: '#ffffff',
               border: 'none',
               borderRadius: 12,
               padding: '14px',
@@ -1140,6 +1280,25 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
           </div>
         </div>
 
+        {/* Connect Bank — compact nudge */}
+        <div style={{
+          border: `1px dashed ${C.border}`,
+          borderRadius: 14,
+          padding: '14px 16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 18 }}>🏦</span>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Skip the manual entry</p>
+              <p style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>Connect your bank to auto-import transactions via Plaid.</p>
+            </div>
+          </div>
+          <PlaidLinkButton onSuccess={onLogged} C={C} />
+        </div>
+
         {/* Recent Logs */}
         {recentLogs.length > 0 && (
           <div style={{
@@ -1149,16 +1308,28 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
             padding: '18px 20px',
             boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
           }}>
-            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}>Recent Logs</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Recent Logs</p>
+              <button
+                type="button"
+                onClick={() => onNavigate('overview')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: C.accent, fontWeight: 700, padding: 0 }}
+              >
+                See all →
+              </button>
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               {recentLogs.map((tx, i) => {
                 const cat = CATEGORIES.find(c => c.id === tx.category);
                 const isIncomeTx = tx.amount > 0;
+                const isDeleting = deletingId === tx._id;
                 return (
                   <div key={tx._id} style={{
                     display: 'flex', alignItems: 'center', gap: 10,
                     padding: '8px 0',
                     borderBottom: i < recentLogs.length - 1 ? `1px solid ${C.hoverBg}` : 'none',
+                    opacity: isDeleting ? 0.4 : 1,
+                    transition: 'opacity 0.2s',
                   }}>
                     <div style={{
                       width: 32, height: 32, borderRadius: 9,
@@ -1172,11 +1343,26 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
                       <p style={{ fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                         {tx.description || tx.category}
                       </p>
-                      <p style={{ fontSize: 10, color: '#94a3b8' }}>{format(new Date(tx.date), 'MMM d')}</p>
+                      <p style={{ fontSize: 10, color: C.muted }}>{format(new Date(tx.date), 'MMM d')}</p>
                     </div>
                     <span style={{ fontSize: 12, fontWeight: 700, color: isIncomeTx ? C.green : C.red, flexShrink: 0 }}>
                       {isIncomeTx ? '+' : '-'}{fmt(tx.amount)}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(tx._id)}
+                      disabled={isDeleting}
+                      title="Delete transaction"
+                      style={{
+                        background: 'none', border: 'none', cursor: isDeleting ? 'not-allowed' : 'pointer',
+                        color: C.muted, fontSize: 14, padding: '2px 4px', lineHeight: 1,
+                        borderRadius: 4, flexShrink: 0, transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={e => { if (!isDeleting) (e.currentTarget as HTMLButtonElement).style.color = '#dc2626'; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.muted; }}
+                    >
+                      ✕
+                    </button>
                   </div>
                 );
               })}
@@ -1192,13 +1378,12 @@ function LogTab({ onLogged, budgets, insights, transactions, C }: {
 
 // ─── Profile Tab ──────────────────────────────────────────────────────────────
 
-function ProfileTab({ userName, userEmail, transactions, insights, C, onRefresh }: {
+function ProfileTab({ userName, userEmail, transactions, insights, C }: {
   userName: string;
   userEmail: string;
   transactions: Transaction[];
   insights: Insights | null;
   C: ReturnType<typeof makeC>;
-  onRefresh: () => void;
 }) {
   const archetype = insights?.archetype ?? 'homebody';
   const arc = ARCHETYPES[archetype] ?? ARCHETYPES.homebody;
@@ -1729,23 +1914,6 @@ function ProfileTab({ userName, userEmail, transactions, insights, C, onRefresh 
 
       </div>
 
-      {/* Connect Bank Account */}
-      <div style={{
-        background: C.card,
-        border: `1px solid ${C.border}`,
-        borderRadius: 16,
-        padding: '20px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ fontSize: 18 }}>🏦</span>
-          <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Connected Accounts</p>
-        </div>
-        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
-          Link your bank to automatically import transactions. Uses Plaid — your credentials are never stored.
-        </p>
-        <PlaidLinkButton onSuccess={onRefresh} C={C} />
-      </div>
     </div>
   );
 }
@@ -2062,6 +2230,7 @@ export default function DashboardPage() {
             budgets={budgets}
             insights={insights}
             transactions={transactions}
+            onNavigate={setActiveTab}
             C={C}
           />
         )}
@@ -2072,7 +2241,6 @@ export default function DashboardPage() {
             transactions={transactions}
             insights={insights}
             C={C}
-            onRefresh={fetchData}
           />
         )}
       </div>

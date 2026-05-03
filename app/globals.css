@@ -168,6 +168,21 @@ button:active {
   opacity: 0.9;
 }
 
+.auth-split-left {
+  display: flex;
+}
+.auth-logo-mobile {
+  display: none;
+}
+@media (max-width: 900px) {
+  .auth-split-left {
+    display: none !important;
+  }
+  .auth-logo-mobile {
+    display: block;
+  }
+}
+
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }

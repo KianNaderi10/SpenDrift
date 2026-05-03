@@ -3,6 +3,7 @@ import { Space_Grotesk } from 'next/font/google';
 import './globals.css';
 import { Providers } from './providers';
 import { Toaster } from 'sonner';
+import { Analytics } from '@vercel/analytics/next';
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ['latin'],
@@ -23,6 +24,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body style={{ background: '#08090f', minHeight: '100vh', color: '#f0f2f8', fontFamily: 'var(--font-space-grotesk), sans-serif' }}>
         <Providers>
           {children}
+          <Analytics />
           <Toaster
             theme="dark"
             position="top-center"

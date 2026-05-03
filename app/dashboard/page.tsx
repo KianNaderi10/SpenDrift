@@ -76,6 +76,24 @@ function fmt(cents: number): string {
   return `$${(Math.abs(cents) / 100).toFixed(2)}`;
 }
 
+function AnimatedNumber({ value, format: fmtFn }: { value: number; format: (v: number) => string }) {
+  const [display, setDisplay] = useState(0);
+  const rafRef = useRef<number | null>(null);
+  useEffect(() => {
+    const start = performance.now();
+    const duration = 750;
+    const animate = (now: number) => {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setDisplay(Math.round(value * eased));
+      if (t < 1) rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [value]);
+  return <>{fmtFn(display)}</>;
+}
+
 // ─── Donut Chart ─────────────────────────────────────────────────────────────
 
 function DonutChart({ totals, C }: { totals: Record<string, number>; C: ReturnType<typeof makeC> }) {
@@ -255,7 +273,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         {/* Total Spent */}
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>TOTAL SPENT</p>
-          <p style={{ fontSize: 22, fontWeight: 800, color: C.red }}>{fmt(totalSpent)}</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: C.red }}><AnimatedNumber value={totalSpent} format={fmt} /></p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
             <span style={{ fontSize: 11, color: '#94a3b8' }}>vs last month</span>
             {spentTrend !== null && (
@@ -268,7 +286,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         {/* Total Income */}
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>TOTAL INCOME</p>
-          <p style={{ fontSize: 22, fontWeight: 800, color: C.green }}>{fmt(totalIncome)}</p>
+          <p style={{ fontSize: 22, fontWeight: 800, color: C.green }}><AnimatedNumber value={totalIncome} format={fmt} /></p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
             <span style={{ fontSize: 11, color: '#94a3b8' }}>vs last month</span>
             {incomeTrend !== null && (
@@ -282,7 +300,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>NET</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: net >= 0 ? C.green : C.red }}>
-            {net >= 0 ? '+' : '-'}{fmt(Math.abs(net))}
+            {net >= 0 ? '+' : '-'}<AnimatedNumber value={Math.abs(net)} format={fmt} />
           </p>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
             <span style={{ fontSize: 11, color: '#94a3b8' }}>{net >= 0 ? 'Surplus' : 'Deficit'}</span>
@@ -297,7 +315,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600, marginBottom: 8, letterSpacing: 0.5 }}>BUDGET USED</p>
           <p style={{ fontSize: 22, fontWeight: 800, color: avgBudgetUsed >= 90 ? C.red : avgBudgetUsed >= 70 ? C.amber : C.green }}>
-            {budgets.length > 0 ? `${avgBudgetUsed}%` : '—'}
+            {budgets.length > 0 ? <AnimatedNumber value={avgBudgetUsed} format={v => `${v}%`} /> : '—'}
           </p>
           {budgets.length > 0 && (
             <div style={{ marginTop: 8, height: 4, background: C.hoverBg, borderRadius: 2 }}>
@@ -450,7 +468,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
                 const cat = CATEGORIES.find(c => c.id === tx.category);
                 const isIncome = tx.amount > 0;
                 return (
-                  <div key={tx._id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < recent.length - 1 ? `1px solid ${C.hoverBg}` : 'none' }}>
+                  <div key={tx._id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 0', borderBottom: i < recent.length - 1 ? `1px solid ${C.hoverBg}` : 'none', animation: 'fadeIn 0.3s ease both', animationDelay: `${i * 0.05}s` }}>
                     <div style={{ width: 34, height: 34, borderRadius: 10, background: `${CAT_COLORS[tx.category] ?? '#94a3b8'}15`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, flexShrink: 0 }}>
                       {cat?.emoji ?? '📦'}
                     </div>
@@ -1343,6 +1361,8 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, onEdit,
                     borderBottom: i < recentLogs.length - 1 ? `1px solid ${C.hoverBg}` : 'none',
                     opacity: isDeleting ? 0.4 : 1,
                     transition: 'opacity 0.2s',
+                    animation: 'fadeIn 0.3s ease both',
+                    animationDelay: `${i * 0.05}s`,
                   }}>
                     <div style={{
                       width: 32, height: 32, borderRadius: 9,
@@ -2645,6 +2665,10 @@ export default function DashboardPage() {
         @keyframes fillBar {
           from { width: 0%; }
         }
+        @keyframes tabFadeIn {
+          from { opacity: 0; transform: translateY(12px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
 
       {/* Sidebar */}
@@ -2659,43 +2683,45 @@ export default function DashboardPage() {
       />
 
       {/* Main content */}
-      <div className="main-content" style={{ marginLeft: 240, padding: '32px 40px', minHeight: '100vh' }}>
-        {activeTab === 'overview' && (
-          <OverviewTab
-            transactions={transactions}
-            budgets={budgets}
-            insights={insights}
-            userName={userName}
-            onRefresh={fetchData}
-            onNavigate={setActiveTab}
-            onEdit={setEditingTx}
-            C={C}
-          />
-        )}
-        {activeTab === 'drift' && <DriftTab insights={insights} C={C} />}
-        {activeTab === 'log' && (
-          <LogTab
-            onLogged={fetchData}
-            budgets={budgets}
-            insights={insights}
-            transactions={transactions}
-            onNavigate={setActiveTab}
-            onEdit={setEditingTx}
-            C={C}
-          />
-        )}
-        {activeTab === 'profile' && (
-          <ProfileTab
-            userName={userName}
-            userEmail={userEmail}
-            userCreatedAt={userCreatedAt}
-            transactions={transactions}
-            insights={insights}
-            budgets={budgets}
-            onRefresh={fetchData}
-            C={C}
-          />
-        )}
+      <div className="main-content" style={{ marginLeft: 240, padding: '32px 40px', minHeight: '100vh', animation: 'pageMountFade 0.45s ease' }}>
+        <div key={activeTab} style={{ animation: 'tabFadeIn 0.25s ease' }}>
+          {activeTab === 'overview' && (
+            <OverviewTab
+              transactions={transactions}
+              budgets={budgets}
+              insights={insights}
+              userName={userName}
+              onRefresh={fetchData}
+              onNavigate={setActiveTab}
+              onEdit={setEditingTx}
+              C={C}
+            />
+          )}
+          {activeTab === 'drift' && <DriftTab insights={insights} C={C} />}
+          {activeTab === 'log' && (
+            <LogTab
+              onLogged={fetchData}
+              budgets={budgets}
+              insights={insights}
+              transactions={transactions}
+              onNavigate={setActiveTab}
+              onEdit={setEditingTx}
+              C={C}
+            />
+          )}
+          {activeTab === 'profile' && (
+            <ProfileTab
+              userName={userName}
+              userEmail={userEmail}
+              userCreatedAt={userCreatedAt}
+              transactions={transactions}
+              insights={insights}
+              budgets={budgets}
+              onRefresh={fetchData}
+              C={C}
+            />
+          )}
+        </div>
       </div>
 
       {/* Edit transaction modal */}

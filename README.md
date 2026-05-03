@@ -1,36 +1,166 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SpenDrift
+
+**Know where your money goes. Before it's gone.**
+
+SpenDrift is a spending personality tracker that reveals your financial archetype — a profile built from your real spending habits. Connect your bank, log transactions, and watch your archetype evolve over time as your habits shift.
+
+---
+
+## Features
+
+- **20 Spending Archetypes** — From The Homebody to The Wealth Builder, your spending patterns map to a personality that changes as you do.
+- **Bank Integration** — Connect your bank account via Plaid to automatically sync and categorize transactions.
+- **Manual Transactions** — Log purchases manually across 15+ categories (dining, travel, shopping, health, etc.).
+- **Budget Tracking** — Set monthly limits per category and track your progress in real time.
+- **Spending Insights** — Visualize your habits with breakdowns by category, trend data, and drift over time.
+- **Dark / Light Theme** — Full theme support across all pages.
+- **Private by Design** — No ads, no data selling. Your financial data stays yours.
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Framework | [Next.js 16](https://nextjs.org) (App Router) |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| Database | MongoDB via [Mongoose](https://mongoosejs.com) |
+| Auth | [NextAuth.js](https://next-auth.js.org) (credentials) |
+| Bank Sync | [Plaid](https://plaid.com) |
+| Password Hashing | bcryptjs |
+
+---
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js 18+
+- A MongoDB connection string (local or [MongoDB Atlas](https://www.mongodb.com/atlas))
+- A [Plaid](https://plaid.com) developer account (for bank sync — optional)
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/KianNaderi10/SpenDrift.git
+cd SpenDrift
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure environment variables
+
+Create a `.env.local` file in the project root:
+
+```env
+# MongoDB
+MONGODB_URI=mongodb+srv://<user>:<password>@cluster.mongodb.net/spendrift
+
+# NextAuth
+NEXTAUTH_SECRET=your-random-secret
+NEXTAUTH_URL=http://localhost:3003
+
+# Plaid (optional — only required for bank account linking)
+PLAID_CLIENT_ID=your-plaid-client-id
+PLAID_SECRET=your-plaid-sandbox-secret
+PLAID_ENV=sandbox
+```
+
+### 4. Run the development server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3003](http://localhost:3003) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Project Structure
 
-## Learn More
+```
+SpenDrift/
+├── app/
+│   ├── page.tsx              # Landing page
+│   ├── layout.tsx            # Root layout
+│   ├── dashboard/            # Main app dashboard
+│   ├── login/                # Sign-in page
+│   ├── register/             # Sign-up page
+│   ├── profile/              # User profile & archetype display
+│   ├── settings/             # App settings
+│   ├── about/                # About page
+│   ├── contact/              # Contact page
+│   ├── privacy/              # Privacy policy
+│   ├── terms/                # Terms of service
+│   └── api/
+│       ├── auth/             # NextAuth endpoints
+│       ├── transactions/     # CRUD for transactions
+│       ├── budgets/          # Budget management
+│       ├── insights/         # Spending analytics
+│       ├── plaid/            # Plaid link & sync
+│       ├── register/         # User registration
+│       └── user/             # User profile endpoints
+├── models/
+│   ├── User.ts               # Mongoose user schema
+│   ├── Transaction.ts        # Mongoose transaction schema
+│   └── Budget.ts             # Mongoose budget schema
+├── lib/
+│   ├── archetype.ts          # Archetype definitions & scoring logic
+│   ├── auth.ts               # NextAuth config
+│   ├── db.ts                 # MongoDB connection
+│   └── plaid.ts              # Plaid client setup
+└── types/                    # Shared TypeScript types
+```
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Spending Archetypes
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+SpenDrift maps your spending to one of 20 personalities:
 
-## Deploy on Vercel
+| Archetype | Dominant Spending |
+|---|---|
+| 🏠 The Homebody | Bills, groceries, home comfort |
+| 🍜 The Foodie | Dining out, restaurants |
+| 🛍️ The Shopaholic | Retail, fashion, online shopping |
+| 🌎 The Explorer | Travel, experiences, entertainment |
+| ⚡ The Minimalist | Low spend, intentional purchases |
+| 💎 The Wealth Builder | Savings-first lifestyle |
+| 🎮 The Gamer | Gaming, subscriptions, tech gear |
+| 🎨 The Creative | Art supplies, events, creative tools |
+| 📚 The Learner | Books, courses, education |
+| 🏋️ The Fitness Buff | Gym, supplements, sports |
+| 🚗 The Commuter | Transport, fuel, transit |
+| 🐾 The Pet Parent | Pet care, vet, accessories |
+| 🍷 The Socialite | Bars, events, social dining |
+| 💊 The Health Nut | Wellness, healthcare, self-care |
+| 🎵 The Music Lover | Concerts, streaming, instruments |
+| 📱 The Tech Enthusiast | Gadgets, apps, hardware |
+| 🏡 The Nester | Home decor, furnishings |
+| ✈️ The Jet-Setter | Flights, hotels, international travel |
+| ☕ The Café Dweller | Coffee shops, remote work spots |
+| 🎭 The Experience Seeker | Events, activities, unique experiences |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Archetypes evolve — as your spending patterns shift month over month, your archetype updates to reflect who you are now.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Scripts
+
+```bash
+npm run dev      # Start dev server on port 3003
+npm run build    # Production build
+npm run start    # Start production server
+npm run lint     # Run ESLint
+```
+
+---
+
+## License
+
+MIT

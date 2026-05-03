@@ -173,13 +173,14 @@ function makeC(isDark: boolean) {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onNavigate, C }: {
+function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onNavigate, onEdit, C }: {
   transactions: Transaction[];
   budgets: Budget[];
   insights: Insights | null;
   userName: string;
   onRefresh: () => void;
   onNavigate: (tab: string) => void;
+  onEdit: (tx: Transaction) => void;
   C: ReturnType<typeof makeC>;
 }) {
   const archetype = insights?.archetype ?? 'homebody';
@@ -333,7 +334,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
       </div>
 
       {/* Donut + Top category side-by-side */}
-      <div style={{ display: 'grid', gridTemplateColumns: topCat ? '3fr 2fr' : '1fr', gap: 20 }}>
+      <div className="overview-split-grid" style={{ display: 'grid', gridTemplateColumns: topCat ? '3fr 2fr' : '1fr', gap: 20 }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Spending Breakdown</p>
           <DonutChart totals={totals} C={C} />
@@ -380,7 +381,7 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
       </div>
 
       {/* Budget + Recent Transactions */}
-      <div style={{ display: 'grid', gridTemplateColumns: budgets.length === 0 ? '1fr 1fr' : '3fr 2fr', gap: 20 }}>
+      <div className="overview-split-grid" style={{ display: 'grid', gridTemplateColumns: budgets.length === 0 ? '1fr 1fr' : '3fr 2fr', gap: 20 }}>
         <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
           <p style={{ fontSize: 16, fontWeight: 700, color: C.text, marginBottom: 16 }}>Budget Status</p>
           {budgets.length === 0 ? (
@@ -462,6 +463,14 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
                     <span style={{ fontSize: 13, fontWeight: 700, color: isIncome ? C.green : C.red, flexShrink: 0 }}>
                       {isIncome ? '+' : '-'}{fmt(tx.amount)}
                     </span>
+                    <button
+                      type="button"
+                      onClick={() => onEdit(tx)}
+                      title="Edit transaction"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 13, padding: '2px 4px', lineHeight: 1, borderRadius: 4, flexShrink: 0, transition: 'color 0.15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.text; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.muted; }}
+                    >✏️</button>
                   </div>
                 );
               })}
@@ -895,12 +904,13 @@ function DriftTab({ insights, C }: { insights: Insights | null; C: ReturnType<ty
 
 // ─── Log Tab ──────────────────────────────────────────────────────────────────
 
-function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
+function LogTab({ onLogged, budgets, insights, transactions, onNavigate, onEdit, C }: {
   onLogged: () => void;
   budgets: Budget[];
   insights: Insights | null;
   transactions: Transaction[];
   onNavigate: (tab: string) => void;
+  onEdit: (tx: Transaction) => void;
   C: ReturnType<typeof makeC>;
 }) {
   const [amount, setAmount] = useState('');
@@ -1353,6 +1363,14 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
                     </span>
                     <button
                       type="button"
+                      onClick={() => onEdit(tx)}
+                      title="Edit transaction"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.muted, fontSize: 13, padding: '2px 4px', lineHeight: 1, borderRadius: 4, flexShrink: 0, transition: 'color 0.15s' }}
+                      onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.text; }}
+                      onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.muted; }}
+                    >✏️</button>
+                    <button
+                      type="button"
                       onClick={() => handleDelete(tx._id)}
                       disabled={isDeleting}
                       title="Delete transaction"
@@ -1363,9 +1381,7 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
                       }}
                       onMouseEnter={e => { if (!isDeleting) (e.currentTarget as HTMLButtonElement).style.color = '#dc2626'; }}
                       onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.muted; }}
-                    >
-                      ✕
-                    </button>
+                    >✕</button>
                   </div>
                 );
               })}
@@ -1586,8 +1602,8 @@ function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights
                 flex: 1, background: C.stripeBg, border: `1px solid ${C.border}`,
                 borderRadius: 10, padding: '10px 12px', textAlign: 'center',
               }}>
-                <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{transactions.length}</p>
-                <p style={{ fontSize: 10, color: C.muted, fontWeight: 600, marginTop: 2 }}>TRANSACTIONS</p>
+                <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{thisMonthTxs.length}</p>
+                <p style={{ fontSize: 10, color: C.muted, fontWeight: 600, marginTop: 2 }}>THIS MONTH</p>
               </div>
             </div>
             {/* 7-day habit tracker */}
@@ -1746,7 +1762,7 @@ function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights
             {[
               { label: 'Spent This Month', value: fmt(thisMonthTotal), color: C.red },
               { label: 'vs Last Month', value: savedVsLast >= 0 ? `${fmt(savedVsLast)} saved` : `${fmt(Math.abs(savedVsLast))} more`, color: savedVsLast >= 0 ? C.green : C.red },
-              { label: 'Transactions', value: transactions.length.toString(), color: C.text },
+              { label: 'Transactions', value: thisMonthTxs.length.toString(), color: C.text },
               { label: 'Categories', value: catsTracked.toString(), color: '#7c3aed' },
             ].map(s => (
               <div key={s.label} style={{
@@ -2351,6 +2367,154 @@ function Sidebar({ activeTab, setActiveTab, userName, userEmail, C, toggle, isDa
   );
 }
 
+// ─── Edit Transaction Modal ───────────────────────────────────────────────────
+
+function EditTransactionModal({ tx, onClose, onSaved, C }: {
+  tx: Transaction;
+  onClose: () => void;
+  onSaved: () => void;
+  C: ReturnType<typeof makeC>;
+}) {
+  const isIncomeTx = tx.amount > 0;
+  const [isIncome, setIsIncome] = useState(isIncomeTx);
+  const [amount, setAmount] = useState(String((Math.abs(tx.amount) / 100).toFixed(2)));
+  const [category, setCategory] = useState(isIncomeTx ? 'income' : tx.category);
+  const [description, setDescription] = useState(tx.description ?? '');
+  const [date, setDate] = useState(tx.date.slice(0, 10));
+  const [saving, setSaving] = useState(false);
+
+  const inputStyle: React.CSSProperties = {
+    width: '100%', background: C.inputBg, border: `1px solid ${C.border}`,
+    borderRadius: 10, padding: '11px 13px', fontSize: 14,
+    color: C.text, outline: 'none', boxSizing: 'border-box',
+  };
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const dollars = parseFloat(amount);
+    if (!dollars || dollars <= 0) return;
+    const cents = Math.round(dollars * 100);
+    const finalAmount = isIncome ? cents : -cents;
+    const finalCategory = isIncome ? 'income' : category;
+    setSaving(true);
+    const res = await fetch(`/api/transactions/${tx._id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: finalAmount, category: finalCategory, description, date }),
+    });
+    setSaving(false);
+    if (res.ok) { onSaved(); onClose(); }
+  }
+
+  return (
+    <div
+      className="edit-modal-overlay"
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.5)',
+        display: 'flex', alignItems: 'flex-end',
+        justifyContent: 'center',
+      }}
+    >
+      <div
+        className="edit-modal-sheet"
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: C.card, borderRadius: '20px 20px 0 0',
+          width: '100%', maxWidth: 520,
+          padding: '24px 24px 40px',
+          maxHeight: '92vh', overflowY: 'auto',
+          boxShadow: '0 -4px 32px rgba(0,0,0,0.18)',
+        }}
+      >
+        {/* Handle */}
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: C.border, margin: '0 auto 20px' }} />
+
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+          <p style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Edit Transaction</p>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: C.muted, padding: 4 }}>✕</button>
+        </div>
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Income / Expense toggle */}
+          <div style={{ display: 'flex', background: C.hoverBg, border: `1px solid ${C.border}`, borderRadius: 10, padding: 3 }}>
+            {[{ label: 'Expense', val: false }, { label: 'Income', val: true }].map(opt => (
+              <button key={opt.label} type="button"
+                onClick={() => { setIsIncome(opt.val); if (opt.val) setCategory('income'); else if (category === 'income') setCategory('dining'); }}
+                style={{
+                  flex: 1, padding: '9px', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  background: isIncome === opt.val ? (opt.val ? C.green : C.red) : 'transparent',
+                  color: isIncome === opt.val ? '#fff' : C.muted,
+                  fontWeight: 700, fontSize: 13, transition: 'all 0.2s',
+                }}
+              >{opt.label}</button>
+            ))}
+          </div>
+
+          {/* Amount */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 6 }}>Amount</label>
+            <div style={{ position: 'relative' }}>
+              <span style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', fontSize: 15, color: C.muted, fontWeight: 700, pointerEvents: 'none' }}>$</span>
+              <input type="number" step="0.01" min="0.01" value={amount} onChange={e => setAmount(e.target.value)} required
+                style={{ ...inputStyle, paddingLeft: 28, fontSize: 16, fontWeight: 700 }} />
+            </div>
+          </div>
+
+          {/* Category */}
+          {!isIncome && (
+            <div>
+              <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 8 }}>Category</label>
+              <div className="log-cat-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 6 }}>
+                {CATEGORIES.filter(c => c.id !== 'income').map(c => (
+                  <button key={c.id} type="button" onClick={() => setCategory(c.id)}
+                    style={{
+                      background: category === c.id ? `${CAT_COLORS[c.id] ?? C.accent}12` : C.inputBg,
+                      border: `1.5px solid ${category === c.id ? (CAT_COLORS[c.id] ?? C.accent) : C.border}`,
+                      borderRadius: 10, padding: '8px 4px 6px', cursor: 'pointer',
+                      display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, transition: 'all 0.15s',
+                    }}
+                  >
+                    <span style={{ fontSize: 18 }}>{c.emoji}</span>
+                    <span className="log-cat-label" style={{ fontSize: 9, color: category === c.id ? (CAT_COLORS[c.id] ?? C.accent) : C.muted, fontWeight: 600, textAlign: 'center', lineHeight: 1.2 }}>{c.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Description */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 6 }}>
+              Description <span style={{ fontWeight: 400, color: C.muted }}>(optional)</span>
+            </label>
+            <input type="text" value={description} onChange={e => setDescription(e.target.value)}
+              placeholder="What was this for?" style={inputStyle} />
+          </div>
+
+          {/* Date */}
+          <div>
+            <label style={{ display: 'block', fontSize: 12, fontWeight: 600, color: C.text, marginBottom: 6 }}>Date</label>
+            <input type="date" value={date} onChange={e => setDate(e.target.value)} required style={inputStyle} />
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <button type="button" onClick={onClose}
+              style={{ flex: 1, background: 'none', border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 600, color: C.text, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={saving}
+              style={{ flex: 1, background: saving ? C.muted : C.accent, border: 'none', borderRadius: 10, padding: '12px', fontSize: 14, fontWeight: 700, color: '#fff', cursor: saving ? 'not-allowed' : 'pointer', transition: 'background 0.2s' }}>
+              {saving ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
@@ -2364,6 +2528,7 @@ export default function DashboardPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [insights, setInsights] = useState<Insights | null>(null);
+  const [editingTx, setEditingTx] = useState<Transaction | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -2393,13 +2558,50 @@ export default function DashboardPage() {
 
   if (status === 'loading' || loading) {
     return (
-      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 36, marginBottom: 12 }}>
-            <span style={{ color: C.text, fontWeight: 800 }}>Spen</span>
-            <span style={{ color: '#16a34a', fontWeight: 800 }}>Drift</span>
+      <div style={{ minHeight: '100vh', background: C.bg, display: 'flex' }}>
+        {/* Sidebar skeleton */}
+        <div style={{
+          width: 220, flexShrink: 0, background: C.sidebarBg,
+          borderRight: `1px solid ${C.border}`, padding: '24px 16px',
+          display: 'flex', flexDirection: 'column', gap: 8,
+        }} className="sidebar">
+          <div className="skeleton" style={{ height: 32, width: 120, marginBottom: 24 }} />
+          {[1,2,3,4,5].map(i => (
+            <div key={i} className="skeleton" style={{ height: 38, borderRadius: 10 }} />
+          ))}
+        </div>
+        {/* Main content skeleton */}
+        <div style={{ flex: 1, padding: '32px 28px', maxWidth: 900 }} className="main-content">
+          {/* Header */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 }}>
+            <div>
+              <div className="skeleton" style={{ height: 14, width: 80, marginBottom: 8 }} />
+              <div className="skeleton" style={{ height: 28, width: 220 }} />
+            </div>
+            <div className="skeleton" style={{ height: 38, width: 120, borderRadius: 10 }} />
           </div>
-          <p style={{ color: '#94a3b8', fontSize: 14 }}>Loading your financial data...</p>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 28 }}>
+            {[1,2,3].map(i => (
+              <div key={i} className="skeleton" style={{ height: 36, width: 90, borderRadius: 10 }} />
+            ))}
+          </div>
+          {/* Stat cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+            {[1,2,3,4].map(i => (
+              <div key={i} className="skeleton" style={{ height: 90, borderRadius: 14 }} />
+            ))}
+          </div>
+          {/* Chart + side panel */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div className="skeleton" style={{ height: 220, borderRadius: 16 }} />
+            <div className="skeleton" style={{ height: 220, borderRadius: 16 }} />
+          </div>
+          {/* Bottom row */}
+          <div style={{ display: 'grid', gridTemplateColumns: '3fr 2fr', gap: 16 }}>
+            <div className="skeleton" style={{ height: 180, borderRadius: 16 }} />
+            <div className="skeleton" style={{ height: 180, borderRadius: 16 }} />
+          </div>
         </div>
       </div>
     );
@@ -2466,6 +2668,7 @@ export default function DashboardPage() {
             userName={userName}
             onRefresh={fetchData}
             onNavigate={setActiveTab}
+            onEdit={setEditingTx}
             C={C}
           />
         )}
@@ -2477,6 +2680,7 @@ export default function DashboardPage() {
             insights={insights}
             transactions={transactions}
             onNavigate={setActiveTab}
+            onEdit={setEditingTx}
             C={C}
           />
         )}
@@ -2493,6 +2697,16 @@ export default function DashboardPage() {
           />
         )}
       </div>
+
+      {/* Edit transaction modal */}
+      {editingTx && (
+        <EditTransactionModal
+          tx={editingTx}
+          onClose={() => setEditingTx(null)}
+          onSaved={fetchData}
+          C={C}
+        />
+      )}
 
       {/* Bottom nav (mobile only) */}
       <div className="bottom-nav" style={{

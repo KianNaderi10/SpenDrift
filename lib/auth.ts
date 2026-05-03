@@ -20,17 +20,21 @@ export const authOptions: NextAuthOptions = {
         if (!user) return null;
         const valid = await bcrypt.compare(credentials.password, user.password);
         if (!valid) return null;
-        return { id: user._id.toString(), name: user.name, email: user.email };
+        return { id: user._id.toString(), name: user.name, email: user.email, createdAt: user.createdAt?.toISOString() ?? null };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
-      if (user) token.id = user.id;
+      if (user) {
+        token.id = user.id;
+        token.createdAt = user.createdAt;
+      }
       return token;
     },
     async session({ session, token }) {
       if (token?.id) session.user.id = token.id as string;
+      if (token?.createdAt) (session.user as Record<string, unknown>).createdAt = token.createdAt;
       return session;
     },
   },

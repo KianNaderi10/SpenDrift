@@ -136,7 +136,7 @@ export default function RegisterPage() {
       </div>
 
       {/* Right form panel */}
-      <div style={{
+      <div className="auth-form-panel" style={{
         flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '40px 24px', background: bg, overflowY: 'auto', minHeight: '100vh',
         position: 'relative',

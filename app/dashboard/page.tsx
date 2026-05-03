@@ -150,6 +150,7 @@ function DonutChart({ totals, C }: { totals: Record<string, number>; C: ReturnTy
 
 function makeC(isDark: boolean) {
   return {
+    isDark,
     bg: isDark ? '#0a0a0a' : '#fafafa',
     card: isDark ? '#1a1a1a' : '#ffffff',
     border: isDark ? 'rgba(255,255,255,0.08)' : '#e5e5e5',
@@ -1378,21 +1379,51 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, C }: {
 
 // ─── Profile Tab ──────────────────────────────────────────────────────────────
 
-function ProfileTab({ userName, userEmail, transactions, insights, C }: {
+function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights, budgets, onRefresh, C }: {
   userName: string;
   userEmail: string;
+  userCreatedAt: string | null;
   transactions: Transaction[];
   insights: Insights | null;
+  budgets: Budget[];
+  onRefresh: () => void;
   C: ReturnType<typeof makeC>;
 }) {
   const archetype = insights?.archetype ?? 'homebody';
   const arc = ARCHETYPES[archetype] ?? ARCHETYPES.homebody;
   const arcIdx = ARCHETYPE_ORDER.indexOf(archetype);
 
+  const profileRouter = useRouter();
+
+  // Budget editing state
+  const [budgetValues, setBudgetValues] = useState<Record<string, string>>(
+    Object.fromEntries(budgets.map(b => [b.category, String((b.limit / 100).toFixed(0))]))
+  );
+  const [savingBudget, setSavingBudget] = useState<string | null>(null);
+
+  async function handleBudgetSave(category: string) {
+    const dollars = parseFloat(budgetValues[category] ?? '0');
+    if (!dollars || dollars <= 0) return;
+    setSavingBudget(category);
+    await fetch('/api/budgets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category, limit: Math.round(dollars * 100) }),
+    });
+    setSavingBudget(null);
+    toast.success(`${category} budget updated`);
+    onRefresh();
+  }
+
   let streak = 0;
   if (transactions.length > 0) {
-    const oldest = new Date(transactions[transactions.length - 1].date);
-    streak = Math.floor((Date.now() - oldest.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+    const txDates = new Set(transactions.map(tx => format(new Date(tx.date), 'yyyy-MM-dd')));
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    let check = txDates.has(todayStr) ? new Date() : subDays(new Date(), 1);
+    while (txDates.has(format(check, 'yyyy-MM-dd'))) {
+      streak++;
+      check = subDays(check, 1);
+    }
   }
 
   const thisMonthTotal = Object.values(insights?.thisMonthTotals ?? {}).reduce((s, v) => s + v, 0);
@@ -1454,25 +1485,62 @@ function ProfileTab({ userName, userEmail, transactions, insights, C }: {
       : null,
   ].filter(Boolean) as { emoji: string; stat: string; desc: string }[];
 
-  const badges: { emoji: string; label: string; desc: string; earned: boolean }[] = [
-    { emoji: '🎯', label: 'First Log',       desc: 'Logged your first transaction',        earned: transactions.length >= 1 },
-    { emoji: '🔥', label: 'On a Roll',        desc: '7+ day tracking streak',               earned: streak >= 7 },
-    { emoji: '📊', label: 'Data Nerd',        desc: 'Logged 20+ transactions',              earned: transactions.length >= 20 },
-    { emoji: '🌈', label: 'Category Explorer', desc: 'Spent across 5+ categories',         earned: catsTracked >= 5 },
-    { emoji: '💚', label: 'Power Saver',      desc: 'Spent less than last month',           earned: savedVsLast > 0 },
-    { emoji: '💎', label: 'Century Club',     desc: 'Logged 100+ transactions',             earned: transactions.length >= 100 },
+  const txWithDesc   = transactions.filter(tx => tx.description && tx.description.trim().length > 0).length;
+  const budgetsSet   = budgets.filter(b => b.limit > 0).length;
+  const hasIncome    = transactions.some(tx => tx.amount > 0);
+  const hasTravelSpend = transactions.some(tx => tx.category === 'travel' && tx.amount < 0);
+  const biggestSingle = Math.max(...transactions.filter(tx => tx.amount < 0).map(tx => Math.abs(tx.amount)), 0);
+  const uniqueMonths  = new Set(transactions.map(tx => format(new Date(tx.date), 'yyyy-MM'))).size;
+
+  const badges: { emoji: string; label: string; desc: string; earned: boolean; progress: number; total: number }[] = [
+    // Logging milestones
+    { emoji: '🎯', label: 'First Log',        desc: 'Log your first transaction',      earned: transactions.length >= 1,   progress: Math.min(transactions.length, 1),   total: 1 },
+    { emoji: '📊', label: 'Data Nerd',         desc: 'Log 20 transactions',             earned: transactions.length >= 20,  progress: Math.min(transactions.length, 20),  total: 20 },
+    { emoji: '🏅', label: 'Half Century',      desc: 'Log 50 transactions',             earned: transactions.length >= 50,  progress: Math.min(transactions.length, 50),  total: 50 },
+    { emoji: '💎', label: 'Century Club',      desc: 'Log 100 transactions',            earned: transactions.length >= 100, progress: Math.min(transactions.length, 100), total: 100 },
+    // Streaks
+    { emoji: '🔥', label: 'On a Roll',         desc: '7-day tracking streak',           earned: streak >= 7,                progress: Math.min(streak, 7),                total: 7 },
+    { emoji: '🔄', label: 'Committed',         desc: '30-day tracking streak',          earned: streak >= 30,               progress: Math.min(streak, 30),               total: 30 },
+    // Categories & breadth
+    { emoji: '🌈', label: 'Category Explorer', desc: 'Spend across 5 categories',      earned: catsTracked >= 5,           progress: Math.min(catsTracked, 5),           total: 5 },
+    { emoji: '🌍', label: 'Globe Trotter',     desc: 'Log a travel expense',            earned: hasTravelSpend,             progress: hasTravelSpend ? 1 : 0,             total: 1 },
+    // Income & savings
+    { emoji: '💰', label: 'Income Tracker',    desc: 'Log your first income',           earned: hasIncome,                  progress: hasIncome ? 1 : 0,                  total: 1 },
+    { emoji: '💚', label: 'Power Saver',       desc: 'Spend less than last month',      earned: savedVsLast > 0,            progress: savedVsLast > 0 ? 1 : 0,           total: 1 },
+    // Quality & budgets
+    { emoji: '📝', label: 'Storyteller',       desc: 'Add descriptions to 10 logs',    earned: txWithDesc >= 10,           progress: Math.min(txWithDesc, 10),           total: 10 },
+    { emoji: '🏦', label: 'Budget Boss',       desc: 'Set budgets for 3 categories',   earned: budgetsSet >= 3,            progress: Math.min(budgetsSet, 3),            total: 3 },
+    // Archetype & personality
+    { emoji: '✨', label: 'Identity Found',    desc: 'Earn your spending archetype',    earned: !!insights,                 progress: insights ? 1 : 0,                   total: 1 },
+    { emoji: '🎭', label: 'Shape Shifter',     desc: 'Change archetype month-to-month', earned: !!lastArc && lastMonthArchetype !== archetype, progress: (!!lastArc && lastMonthArchetype !== archetype) ? 1 : 0, total: 1 },
+    // Spending patterns
+    { emoji: '💸', label: 'Big Spender',       desc: 'Single transaction over $100',   earned: biggestSingle >= 10000,     progress: biggestSingle >= 10000 ? 1 : 0,     total: 1 },
   ];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24, animation: 'fadeIn 0.3s ease' }}>
       {/* Header */}
-      <div>
-        <p style={{ fontSize: 12, color: '#94a3b8', marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>ACCOUNT</p>
-        <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Profile</h1>
+      <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
+        <div>
+          <p style={{ fontSize: 12, color: C.muted, marginBottom: 3, fontWeight: 600, letterSpacing: 0.5 }}>ACCOUNT</p>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: C.text }}>Profile</h1>
+        </div>
+        <button
+          onClick={() => profileRouter.push('/settings')}
+          style={{
+            background: 'none', border: `1px solid ${C.border}`, borderRadius: 8,
+            padding: '8px 14px', cursor: 'pointer', fontSize: 13, fontWeight: 600,
+            color: C.muted, transition: 'all 0.15s', marginBottom: 2,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLButtonElement).style.color = C.text; (e.currentTarget as HTMLButtonElement).style.borderColor = C.text; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLButtonElement).style.color = C.muted; (e.currentTarget as HTMLButtonElement).style.borderColor = C.border; }}
+        >
+          ⚙ Settings
+        </button>
       </div>
 
       {/* Left-right layout on desktop */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="profile-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         {/* Left column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* User card */}
@@ -1497,32 +1565,57 @@ function ProfileTab({ userName, userEmail, transactions, insights, C }: {
               <div style={{ minWidth: 0 }}>
                 <h2 style={{ fontSize: 18, fontWeight: 800, color: C.text, marginBottom: 3 }}>{userName}</h2>
                 <p style={{ fontSize: 13, color: C.muted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{userEmail}</p>
+                {userCreatedAt && (
+                  <p style={{ fontSize: 11, color: C.muted, marginTop: 3 }}>
+                    Member since {format(new Date(userCreatedAt), 'MMM yyyy')}
+                  </p>
+                )}
               </div>
             </div>
-            <div style={{ display: 'flex', gap: 12 }}>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
               <div style={{
-                flex: 1,
-                background: C.stripeBg,
-                border: `1px solid ${C.border}`,
-                borderRadius: 10,
-                padding: '10px 12px',
-                textAlign: 'center',
+                flex: 1, background: C.stripeBg, border: `1px solid ${C.border}`,
+                borderRadius: 10, padding: '10px 12px', textAlign: 'center',
               }}>
                 <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{streak}</p>
-                <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>DAY STREAK 🔥</p>
+                <p style={{ fontSize: 10, color: C.muted, fontWeight: 600, marginTop: 2 }}>DAY STREAK 🔥</p>
               </div>
               <div style={{
-                flex: 1,
-                background: C.stripeBg,
-                border: `1px solid ${C.border}`,
-                borderRadius: 10,
-                padding: '10px 12px',
-                textAlign: 'center',
+                flex: 1, background: C.stripeBg, border: `1px solid ${C.border}`,
+                borderRadius: 10, padding: '10px 12px', textAlign: 'center',
               }}>
                 <p style={{ fontSize: 18, fontWeight: 800, color: C.text }}>{transactions.length}</p>
-                <p style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600, marginTop: 2 }}>TRANSACTIONS</p>
+                <p style={{ fontSize: 10, color: C.muted, fontWeight: 600, marginTop: 2 }}>TRANSACTIONS</p>
               </div>
             </div>
+            {/* 7-day habit tracker */}
+            {(() => {
+              const txDateSet = new Set(transactions.map(tx => format(new Date(tx.date), 'yyyy-MM-dd')));
+              const days = Array.from({ length: 7 }, (_, i) => {
+                const d = subDays(new Date(), 6 - i);
+                return { date: format(d, 'yyyy-MM-dd'), label: format(d, 'EEE'), isToday: i === 6 };
+              });
+              return (
+                <div>
+                  <p style={{ fontSize: 10, color: C.muted, fontWeight: 600, letterSpacing: 0.5, marginBottom: 8 }}>LAST 7 DAYS</p>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {days.map(day => (
+                      <div key={day.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                        <div style={{
+                          width: '100%', aspectRatio: '1', borderRadius: 7,
+                          background: txDateSet.has(day.date) ? C.green : C.hoverBg,
+                          border: `1.5px solid ${txDateSet.has(day.date) ? C.green : C.border}`,
+                          boxShadow: txDateSet.has(day.date) ? `0 0 6px ${C.green}50` : 'none',
+                        }} />
+                        <span style={{ fontSize: 9, color: day.isToday ? C.text : C.muted, fontWeight: day.isToday ? 700 : 400 }}>
+                          {day.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* Archetype card */}
@@ -1641,12 +1734,13 @@ function ProfileTab({ userName, userEmail, transactions, insights, C }: {
             <ShareArchetypeCard arc={arc} C={C} />
             <NextBadgeCard badges={badges} C={C} />
           </div>
+
         </div>
 
         {/* Right column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {/* Stats grid */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="profile-stats-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             {[
               { label: 'Spent This Month', value: fmt(thisMonthTotal), color: C.red },
               { label: 'vs Last Month', value: savedVsLast >= 0 ? `${fmt(savedVsLast)} saved` : `${fmt(Math.abs(savedVsLast))} more`, color: savedVsLast >= 0 ? C.green : C.red },
@@ -1764,57 +1858,184 @@ function ProfileTab({ userName, userEmail, transactions, insights, C }: {
             </div>
           )}
 
-          {/* Monthly Montage */}
-          <div style={{ display: 'flex', gap: 16 }}>
-            {/* Monthly Montage */}
-            <div style={{
-              flex: 1,
-              background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 100%)',
-              border: '1px solid rgba(139,92,246,0.3)',
-              borderRadius: 16,
-              padding: '20px',
-              position: 'relative',
-              overflow: 'hidden',
-            }}>
-              <div style={{
-                position: 'absolute', top: -20, right: -20, width: 100, height: 100,
-                borderRadius: '50%', background: 'rgba(139,92,246,0.15)',
-              }} />
-              <p style={{ fontSize: 11, fontWeight: 700, color: '#a78bfa', letterSpacing: 1, marginBottom: 6 }}>✨ MONTHLY MONTAGE</p>
-              <h3 style={{ fontSize: 15, fontWeight: 800, color: '#ffffff', marginBottom: 6 }}>Your spending story, cut together.</h3>
-              <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.6)', lineHeight: 1.5, marginBottom: 14 }}>
-                Top categories, biggest splurge, archetype evolution, and totals.
-              </p>
-              <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: 18, fontWeight: 800, color: '#a78bfa' }}>{arc.emoji}</p>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Archetype</p>
+          {/* Month at a Glance */}
+          <div style={{
+            background: C.card,
+            border: `1px solid ${C.border}`,
+            borderRadius: 16,
+            padding: '18px 20px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+          }}>
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.muted, letterSpacing: 1, marginBottom: 14 }}>MONTH AT A GLANCE</p>
+            <div className="profile-stats-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              {[
+                { label: 'Total Spent', value: fmt(thisMonthTotal), color: C.red },
+                { label: 'Net', value: (() => { const net = thisMonthIncome - thisMonthTotal; return `${net >= 0 ? '+' : '-'}${fmt(Math.abs(net))}`; })(), color: thisMonthIncome >= thisMonthTotal ? C.green : C.red },
+                { label: 'Purchases', value: `${expenseTxCount}`, color: C.text },
+                { label: 'Peak Day', value: busiestDay ?? '—', color: C.amber },
+              ].map(s => (
+                <div key={s.label} style={{
+                  background: C.hoverBg, borderRadius: 10, padding: '10px 12px',
+                }}>
+                  <p style={{ fontSize: 10, color: C.muted, fontWeight: 600, marginBottom: 4, letterSpacing: 0.5 }}>{s.label.toUpperCase()}</p>
+                  <p style={{ fontSize: 16, fontWeight: 800, color: s.color, letterSpacing: '-0.3px' }}>{s.value}</p>
                 </div>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: 18, fontWeight: 800, color: '#ffffff' }}>{transactions.length}</p>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>Transactions</p>
-                </div>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: 18, fontWeight: 800, color: '#ffffff' }}>{fmt(thisMonthTotal)}</p>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)' }}>This Month</p>
-                </div>
-              </div>
-              <div style={{
-                background: 'rgba(139,92,246,0.2)',
-                border: '1px solid rgba(139,92,246,0.4)',
-                borderRadius: 10,
-                padding: '8px',
-                textAlign: 'center',
-                fontSize: 12,
-                color: '#a78bfa',
-                fontWeight: 700,
-              }}>
-                Coming Soon — end of month
-              </div>
+              ))}
             </div>
+          </div>
+
+          {/* Budget Management */}
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '18px 20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 16 }}>Monthly Budgets</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {CATEGORIES.filter(c => c.id !== 'income').map(cat => {
+                const color = CAT_COLORS[cat.id] ?? C.muted;
+                const spent = insights?.thisMonthTotals[cat.id] ?? 0;
+                const limitDollars = budgetValues[cat.id] ?? '';
+                const limitCents = parseFloat(limitDollars) * 100 || 0;
+                const pct = limitCents > 0 ? Math.min((spent / limitCents) * 100, 100) : 0;
+                const barColor = pct >= 100 ? C.red : pct >= 80 ? C.amber : C.green;
+                return (
+                  <div key={cat.id}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                      <span style={{ fontSize: 15 }}>{cat.emoji}</span>
+                      <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: C.text }}>{cat.label}</span>
+                      <span style={{ fontSize: 11, color: C.muted, marginRight: 4 }}>${(spent / 100).toFixed(0)} spent</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{ fontSize: 12, color: C.muted }}>$</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          value={limitDollars}
+                          onChange={e => setBudgetValues(v => ({ ...v, [cat.id]: e.target.value }))}
+                          onBlur={() => { if (limitDollars) handleBudgetSave(cat.id); }}
+                          onKeyDown={e => { if (e.key === 'Enter') { (e.currentTarget as HTMLInputElement).blur(); } }}
+                          placeholder="—"
+                          style={{ width: 56, background: C.inputBg, border: `1px solid ${C.border}`, borderRadius: 6, padding: '4px 6px', fontSize: 12, color: C.text, outline: 'none', textAlign: 'right' }}
+                        />
+                        {savingBudget === cat.id && <span style={{ fontSize: 10, color: C.muted }}>...</span>}
+                      </div>
+                    </div>
+                    {limitCents > 0 && (
+                      <div style={{ height: 3, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ width: `${pct}%`, height: '100%', background: barColor, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <p style={{ fontSize: 11, color: C.muted, marginTop: 12 }}>Tab or press Enter to save a budget limit.</p>
           </div>
         </div>
       </div>
+
+      {/* Spending Heatmap */}
+      {(() => {
+        const WEEKS = 14;
+        const today = new Date();
+        // Align to Sunday so grid starts on a full week boundary
+        const startOffset = today.getDay(); // 0=Sun
+        const gridStart = subDays(today, WEEKS * 7 - 1 + startOffset);
+
+        // Build a map: date-string → total abs spend
+        const daySpend: Record<string, number> = {};
+        transactions.filter(tx => tx.amount < 0).forEach(tx => {
+          const key = format(new Date(tx.date), 'yyyy-MM-dd');
+          daySpend[key] = (daySpend[key] ?? 0) + Math.abs(tx.amount);
+        });
+
+        const maxSpend = Math.max(...Object.values(daySpend), 1);
+
+        // Build grid: array of WEEKS columns, each with 7 day cells
+        const totalDays = WEEKS * 7;
+        const cells = Array.from({ length: totalDays }, (_, i) => {
+          const d = subDays(today, totalDays - 1 - i + (today.getDay() === 6 ? 0 : today.getDay() + 1) % 7);
+          // Simpler: just go day by day from gridStart
+          const day = new Date(gridStart);
+          day.setDate(gridStart.getDate() + i);
+          const key = format(day, 'yyyy-MM-dd');
+          const spend = daySpend[key] ?? 0;
+          const isFuture = day > today;
+          return { key, spend, isFuture, label: format(day, 'MMM d') };
+        });
+
+        // Week columns
+        const weeks: typeof cells[] = [];
+        for (let w = 0; w < WEEKS; w++) weeks.push(cells.slice(w * 7, w * 7 + 7));
+
+        function cellColor(spend: number, isFuture: boolean) {
+          if (isFuture) return 'transparent';
+          if (spend === 0) return C.hoverBg;
+          const intensity = spend / maxSpend;
+          if (intensity < 0.25) return C.isDark ? '#14532d' : '#bbf7d0';
+          if (intensity < 0.5)  return C.isDark ? '#166534' : '#4ade80';
+          if (intensity < 0.75) return C.isDark ? '#15803d' : '#22c55e';
+          return C.isDark ? '#16a34a' : '#15803d';
+        }
+
+        const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+        // Month labels: track month changes across weeks
+        const weekMonths = weeks.map((week, wi) => {
+          const idx = wi * 7;
+          const d = new Date(gridStart);
+          d.setDate(gridStart.getDate() + idx);
+          return { month: d.getMonth(), label: format(d, 'MMM') };
+        });
+        const monthLabelRow: (string | null)[] = weekMonths.map((w, i) =>
+          i === 0 || w.month !== weekMonths[i - 1].month ? w.label : null
+        );
+
+        return (
+          <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Spending Activity</p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 10, color: C.muted }}>Less</span>
+                {[C.hoverBg, C.isDark ? '#14532d' : '#bbf7d0', C.isDark ? '#166534' : '#4ade80', C.isDark ? '#15803d' : '#22c55e', C.isDark ? '#16a34a' : '#15803d'].map((col, i) => (
+                  <div key={i} style={{ width: 10, height: 10, borderRadius: 3, background: col, border: `1px solid ${C.border}` }} />
+                ))}
+                <span style={{ fontSize: 10, color: C.muted }}>More</span>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 3 }}>
+              {/* Day-of-week labels */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginRight: 4, paddingTop: 18 }}>
+                {DOW_LABELS.map((l, i) => (
+                  <div key={i} style={{ width: 10, height: 10, fontSize: 8, color: C.muted, lineHeight: '10px', textAlign: 'center' }}>{i % 2 === 1 ? l : ''}</div>
+                ))}
+              </div>
+              {/* Week columns */}
+              <div style={{ flex: 1, overflowX: 'auto' }}>
+                <div style={{ display: 'flex', gap: 3, minWidth: 0 }}>
+                  {weeks.map((week, wi) => (
+                    <div key={wi} style={{ display: 'flex', flexDirection: 'column', gap: 3, flex: '0 0 auto' }}>
+                      <div style={{ height: 14, fontSize: 9, color: C.muted, whiteSpace: 'nowrap', overflow: 'visible' }}>
+                        {monthLabelRow[wi] ?? ''}
+                      </div>
+                      {week.map((cell, di) => (
+                        <div
+                          key={cell.key}
+                          title={cell.isFuture ? '' : `${cell.label}: ${cell.spend > 0 ? fmt(cell.spend) : 'no spend'}`}
+                          style={{
+                            width: 13, height: 13, borderRadius: 3,
+                            background: cellColor(cell.spend, cell.isFuture),
+                            border: cell.isFuture ? 'none' : `1px solid ${cell.spend > 0 ? 'transparent' : C.border}`,
+                            cursor: cell.spend > 0 ? 'default' : 'default',
+                            transition: 'transform 0.1s',
+                          }}
+                        />
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Badges */}
       <div style={{
@@ -1824,27 +2045,49 @@ function ProfileTab({ userName, userEmail, transactions, insights, C }: {
         padding: '20px',
         boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
       }}>
-        <p style={{ fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 16 }}>Achievements</p>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12 }}>
-          {badges.map(b => (
-            <div key={b.label} style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
-              padding: '14px 8px',
-              borderRadius: 14,
-              background: b.earned ? 'rgba(22,163,74,0.06)' : C.stripeBg,
-              border: `1px solid ${b.earned ? 'rgba(22,163,74,0.2)' : C.border}`,
-              opacity: b.earned ? 1 : 0.4,
-              transition: 'all 0.2s',
-            }}>
-              <span style={{ fontSize: 26, filter: b.earned ? 'none' : 'grayscale(1)' }}>{b.emoji}</span>
-              <p style={{ fontSize: 11, fontWeight: 700, color: b.earned ? C.text : C.muted, textAlign: 'center', lineHeight: 1.3 }}>{b.label}</p>
-              <p style={{ fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 1.4 }}>{b.desc}</p>
-            </div>
-          ))}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Achievements</p>
+          <p style={{ fontSize: 12, color: C.muted }}>{badges.filter(b => b.earned).length} / {badges.length} earned</p>
+        </div>
+        <div className="profile-badges-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12 }}>
+          {badges.map(b => {
+            const pct = b.total > 0 ? Math.round((b.progress / b.total) * 100) : 0;
+            return (
+              <div key={b.label} style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6,
+                padding: '14px 8px',
+                borderRadius: 14,
+                background: b.earned ? 'rgba(22,163,74,0.06)' : C.stripeBg,
+                border: `1px solid ${b.earned ? 'rgba(22,163,74,0.2)' : C.border}`,
+                transition: 'all 0.2s',
+                position: 'relative',
+              }}>
+                {b.earned && (
+                  <div style={{
+                    position: 'absolute', top: 8, right: 8,
+                    width: 14, height: 14, borderRadius: '50%',
+                    background: C.green, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 8, color: '#fff', fontWeight: 700,
+                  }}>✓</div>
+                )}
+                <span style={{ fontSize: 26, filter: b.earned ? 'none' : 'grayscale(1)', opacity: b.earned ? 1 : 0.5 }}>{b.emoji}</span>
+                <p style={{ fontSize: 11, fontWeight: 700, color: b.earned ? C.text : C.muted, textAlign: 'center', lineHeight: 1.3 }}>{b.label}</p>
+                <p style={{ fontSize: 10, color: C.muted, textAlign: 'center', lineHeight: 1.4 }}>{b.desc}</p>
+                {!b.earned && b.total > 1 && (
+                  <div style={{ width: '100%', marginTop: 2 }}>
+                    <div style={{ height: 3, background: C.border, borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: C.accent, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                    </div>
+                    <p style={{ fontSize: 9, color: C.muted, textAlign: 'center', marginTop: 3 }}>{b.progress} / {b.total}</p>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
       {/* Two-column: Money Story + Fun Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      <div className="profile-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
 
         {/* Your Money Story */}
         <div style={{
@@ -2164,6 +2407,7 @@ export default function DashboardPage() {
 
   const userName = session.user?.name ?? 'User';
   const userEmail = session.user?.email ?? '';
+  const userCreatedAt = (session.user as Record<string, unknown>)?.createdAt as string | null ?? null;
 
   return (
     <div style={{ minHeight: '100vh', background: C.bg }}>
@@ -2238,8 +2482,11 @@ export default function DashboardPage() {
           <ProfileTab
             userName={userName}
             userEmail={userEmail}
+            userCreatedAt={userCreatedAt}
             transactions={transactions}
             insights={insights}
+            budgets={budgets}
+            onRefresh={fetchData}
             C={C}
           />
         )}

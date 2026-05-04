@@ -19,6 +19,9 @@ export async function PATCH(
     if (category !== undefined && (typeof category !== 'string' || !category.trim())) {
       return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
     }
+    if (date !== undefined && isNaN(new Date(date).getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
+    }
     await connectDB();
     const tx = await Transaction.findOneAndUpdate(
       { _id: id, userId: session.user.id },

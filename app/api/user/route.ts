@@ -7,6 +7,20 @@ import Transaction from '@/models/Transaction';
 import Budget from '@/models/Budget';
 import bcrypt from 'bcryptjs';
 
+export async function GET() {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    await connectDB();
+    const user = await User.findById(session.user.id).select('plaidAccessToken').lean() as { plaidAccessToken?: string } | null;
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    return NextResponse.json({ hasPlaidConnected: !!user.plaidAccessToken });
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: Request) {
   try {
     const session = await getServerSession(authOptions);

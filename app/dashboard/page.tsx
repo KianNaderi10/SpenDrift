@@ -197,11 +197,12 @@ function makeC(isDark: boolean) {
 
 // ─── Overview Tab ─────────────────────────────────────────────────────────────
 
-function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onNavigate, onEdit, C }: {
+function OverviewTab({ transactions, budgets, insights, userName, hasPlaidConnected, onRefresh, onNavigate, onEdit, C }: {
   transactions: Transaction[];
   budgets: Budget[];
   insights: Insights | null;
   userName: string;
+  hasPlaidConnected: boolean;
   onRefresh: () => void;
   onNavigate: (tab: string) => void;
   onEdit: (tx: Transaction) => void;
@@ -539,16 +540,27 @@ function OverviewTab({ transactions, budgets, insights, userName, onRefresh, onN
       </div>
 
       {/* Connect Bank */}
-      <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-          <span style={{ fontSize: 18 }}>🏦</span>
-          <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Connect Bank Account</p>
+      {hasPlaidConnected ? (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ fontSize: 20 }}>🏦</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 14, fontWeight: 700, color: C.text }}>Bank Connected</p>
+            <p style={{ fontSize: 12, color: C.muted }}>Your transactions are synced automatically.</p>
+          </div>
+          <span style={{ fontSize: 18, color: C.green }}>✓</span>
         </div>
-        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
-          Link your bank to automatically import transactions. Uses Plaid — your credentials are never stored.
-        </p>
-        <PlaidLinkButton onSuccess={onRefresh} C={C} />
-      </div>
+      ) : (
+        <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '20px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 18 }}>🏦</span>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.text }}>Connect Bank Account</p>
+          </div>
+          <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.6, marginBottom: 14 }}>
+            Link your bank to automatically import transactions. Uses Plaid — your credentials are never stored.
+          </p>
+          <PlaidLinkButton onSuccess={onRefresh} C={C} />
+        </div>
+      )}
     </div>
   );
 }
@@ -1451,16 +1463,24 @@ function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights
   );
   const [savingBudget, setSavingBudget] = useState<string | null>(null);
 
+  useEffect(() => {
+    setBudgetValues(Object.fromEntries(budgets.map(b => [b.category, String((b.limit / 100).toFixed(0))])));
+  }, [budgets]);
+
   async function handleBudgetSave(category: string) {
     const dollars = parseFloat(budgetValues[category] ?? '0');
     if (!dollars || dollars <= 0) return;
     setSavingBudget(category);
-    await fetch('/api/budgets', {
+    const res = await fetch('/api/budgets', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ category, limit: Math.round(dollars * 100) }),
     });
     setSavingBudget(null);
+    if (!res.ok) {
+      toast.error(`Failed to update ${category} budget`);
+      return;
+    }
     toast.success(`${category} budget updated`);
     onRefresh();
   }
@@ -2438,6 +2458,7 @@ function EditTransactionModal({ tx, onClose, onSaved, C }: {
     });
     setSaving(false);
     if (res.ok) { onSaved(); onClose(); }
+    else { toast.error('Failed to save changes. Please try again.'); }
   }
 
   return (
@@ -2563,6 +2584,7 @@ export default function DashboardPage() {
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [insights, setInsights] = useState<Insights | null>(null);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [hasPlaidConnected, setHasPlaidConnected] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -2571,14 +2593,16 @@ export default function DashboardPage() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [txRes, bRes, iRes] = await Promise.all([
+      const [txRes, bRes, iRes, uRes] = await Promise.all([
         fetch('/api/transactions'),
         fetch('/api/budgets'),
         fetch('/api/insights'),
+        fetch('/api/user'),
       ]);
       if (txRes.ok) setTransactions(await txRes.json());
       if (bRes.ok) setBudgets(await bRes.json());
       if (iRes.ok) setInsights(await iRes.json());
+      if (uRes.ok) { const u = await uRes.json(); setHasPlaidConnected(u.hasPlaidConnected ?? false); }
     } catch (e) {
       console.error(e);
     } finally {
@@ -2705,6 +2729,7 @@ export default function DashboardPage() {
               budgets={budgets}
               insights={insights}
               userName={userName}
+              hasPlaidConnected={hasPlaidConnected}
               onRefresh={fetchData}
               onNavigate={setActiveTab}
               onEdit={setEditingTx}

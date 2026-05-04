@@ -17,7 +17,7 @@ interface Props {
   };
 }
 
-function LinkButton({ linkToken, onSuccess, C }: Props & { linkToken: string }) {
+function LinkButton({ linkToken, onSuccess, onExit, C }: Props & { linkToken: string; onExit: () => void }) {
   const handleSuccess: PlaidLinkOnSuccess = useCallback(async (public_token) => {
     try {
       const res = await fetch('/api/plaid/exchange-token', {
@@ -34,7 +34,7 @@ function LinkButton({ linkToken, onSuccess, C }: Props & { linkToken: string }) 
     }
   }, [onSuccess]);
 
-  const { open, ready } = usePlaidLink({ token: linkToken, onSuccess: handleSuccess });
+  const { open, ready } = usePlaidLink({ token: linkToken, onSuccess: handleSuccess, onExit });
 
   useEffect(() => {
     if (ready) open();
@@ -66,6 +66,7 @@ export default function PlaidLinkButton({ onSuccess, C }: Props) {
         <LinkButton
           linkToken={linkToken}
           onSuccess={() => { setLinkToken(null); setLoading(false); onSuccess(); }}
+          onExit={() => { setLinkToken(null); setLoading(false); }}
           C={C}
         />
       )}

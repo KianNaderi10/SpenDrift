@@ -994,7 +994,7 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, onEdit,
     const cents = Math.round(dollars * 100);
     const finalAmount = isIncome ? cents : -cents;
     const willEarnGlobeTrotter = !isIncome && category === 'travel' &&
-      !transactions.some(tx => tx.category === 'travel' && tx.amount < 0);
+      !(insights?.hasTravelEver ?? transactions.some(tx => tx.category === 'travel' && tx.amount < 0));
     setLoading(true);
     const res = await fetch('/api/transactions', {
       method: 'POST',
@@ -1496,10 +1496,10 @@ function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights
     }
   }
 
-  const thisMonthTotal = Object.values(insights?.thisMonthTotals ?? {}).reduce((s, v) => s + v, 0);
-  const lastMonthTotal = Object.values(insights?.lastMonthTotals ?? {}).reduce((s, v) => s + v, 0);
+  const thisMonthTotal = Object.entries(insights?.thisMonthTotals ?? {}).filter(([k]) => k !== 'income').reduce((s, [, v]) => s + v, 0);
+  const lastMonthTotal = Object.entries(insights?.lastMonthTotals ?? {}).filter(([k]) => k !== 'income').reduce((s, [, v]) => s + v, 0);
   const savedVsLast = lastMonthTotal - thisMonthTotal;
-  const catsTracked = Object.keys(insights?.thisMonthTotals ?? {}).length;
+  const catsTracked = Object.keys(insights?.thisMonthTotals ?? {}).filter(k => k !== 'income').length;
 
   const now = new Date();
   const thisMonthIncome = transactions
@@ -1507,6 +1507,7 @@ function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights
     .reduce((s, tx) => s + tx.amount, 0);
 
   const topCategories = Object.entries(insights?.thisMonthTotals ?? {})
+    .filter(([k]) => k !== 'income')
     .sort(([, a], [, b]) => b - a)
     .slice(0, 5);
 

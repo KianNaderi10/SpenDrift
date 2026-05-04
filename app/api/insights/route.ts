@@ -48,6 +48,15 @@ export async function GET() {
 
     const archetype = computeArchetype(thisTotals);
 
+    // All-time badge stats (derived from allTxs — no date filter, up to 500 records)
+    const allExpenses = allTxs.filter((tx: { amount: number; category: string; description: string }) => tx.amount < 0);
+    const totalTxCount = allTxs.length;
+    const totalWithDesc = allTxs.filter((tx: { description: string }) => tx.description && tx.description.trim().length > 0).length;
+    const maxExpense = allExpenses.length > 0 ? Math.max(...allExpenses.map((tx: { amount: number }) => Math.abs(tx.amount))) : 0;
+    const hasTravelEver = allExpenses.some((tx: { category: string }) => tx.category === 'travel');
+    const hasIncomeEver = allTxs.some((tx: { amount: number }) => tx.amount > 0);
+    const distinctCatCount = new Set(allExpenses.map((tx: { category: string }) => tx.category)).size;
+
     // Top drift insights
     const insights = Object.entries(drift)
       .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
@@ -97,6 +106,12 @@ export async function GET() {
       insights,
       weekendDiff,
       dailySpending: daily,
+      totalTxCount,
+      totalWithDesc,
+      maxExpense,
+      hasTravelEver,
+      hasIncomeEver,
+      distinctCatCount,
     });
   } catch (err) {
     console.error(err);

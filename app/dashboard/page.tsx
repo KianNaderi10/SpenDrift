@@ -33,6 +33,12 @@ interface Insights {
   insights: { category: string; drift: number; thisMonth: number; lastMonth: number }[];
   weekendDiff: number;
   dailySpending: Record<string, number>;
+  totalTxCount: number;
+  totalWithDesc: number;
+  maxExpense: number;
+  hasTravelEver: boolean;
+  hasIncomeEver: boolean;
+  distinctCatCount: number;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -1529,24 +1535,26 @@ function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights
       : null,
   ].filter(Boolean) as { emoji: string; stat: string; desc: string }[];
 
-  const txWithDesc   = transactions.filter(tx => tx.description && tx.description.trim().length > 0).length;
-  const budgetsSet   = budgets.filter(b => b.limit > 0).length;
-  const hasIncome    = transactions.some(tx => tx.amount > 0);
-  const hasTravelSpend = transactions.some(tx => tx.category === 'travel' && tx.amount < 0);
-  const biggestSingle = Math.max(...transactions.filter(tx => tx.amount < 0).map(tx => Math.abs(tx.amount)), 0);
+  const totalTxCount  = insights?.totalTxCount ?? transactions.length;
+  const txWithDesc    = insights?.totalWithDesc ?? transactions.filter(tx => tx.description && tx.description.trim().length > 0).length;
+  const budgetsSet    = budgets.filter(b => b.limit > 0).length;
+  const hasIncome     = insights?.hasIncomeEver ?? transactions.some(tx => tx.amount > 0);
+  const hasTravelSpend = insights?.hasTravelEver ?? transactions.some(tx => tx.category === 'travel' && tx.amount < 0);
+  const biggestSingle = insights?.maxExpense ?? Math.max(...transactions.filter(tx => tx.amount < 0).map(tx => Math.abs(tx.amount)), 0);
+  const distinctCatCount = insights?.distinctCatCount ?? Object.keys(insights?.thisMonthTotals ?? {}).length;
   const uniqueMonths  = new Set(transactions.map(tx => format(new Date(tx.date), 'yyyy-MM'))).size;
 
   const badges: { emoji: string; label: string; desc: string; earned: boolean; progress: number; total: number }[] = [
     // Logging milestones
-    { emoji: '🎯', label: 'First Log',        desc: 'Log your first transaction',      earned: transactions.length >= 1,   progress: Math.min(transactions.length, 1),   total: 1 },
-    { emoji: '📊', label: 'Data Nerd',         desc: 'Log 20 transactions',             earned: transactions.length >= 20,  progress: Math.min(transactions.length, 20),  total: 20 },
-    { emoji: '🏅', label: 'Half Century',      desc: 'Log 50 transactions',             earned: transactions.length >= 50,  progress: Math.min(transactions.length, 50),  total: 50 },
-    { emoji: '💎', label: 'Century Club',      desc: 'Log 100 transactions',            earned: transactions.length >= 100, progress: Math.min(transactions.length, 100), total: 100 },
+    { emoji: '🎯', label: 'First Log',        desc: 'Log your first transaction',      earned: totalTxCount >= 1,   progress: Math.min(totalTxCount, 1),   total: 1 },
+    { emoji: '📊', label: 'Data Nerd',         desc: 'Log 20 transactions',             earned: totalTxCount >= 20,  progress: Math.min(totalTxCount, 20),  total: 20 },
+    { emoji: '🏅', label: 'Half Century',      desc: 'Log 50 transactions',             earned: totalTxCount >= 50,  progress: Math.min(totalTxCount, 50),  total: 50 },
+    { emoji: '💎', label: 'Century Club',      desc: 'Log 100 transactions',            earned: totalTxCount >= 100, progress: Math.min(totalTxCount, 100), total: 100 },
     // Streaks
     { emoji: '🔥', label: 'On a Roll',         desc: '7-day tracking streak',           earned: streak >= 7,                progress: Math.min(streak, 7),                total: 7 },
     { emoji: '🔄', label: 'Committed',         desc: '30-day tracking streak',          earned: streak >= 30,               progress: Math.min(streak, 30),               total: 30 },
     // Categories & breadth
-    { emoji: '🌈', label: 'Category Explorer', desc: 'Spend across 5 categories',      earned: catsTracked >= 5,           progress: Math.min(catsTracked, 5),           total: 5 },
+    { emoji: '🌈', label: 'Category Explorer', desc: 'Spend across 5 categories',      earned: distinctCatCount >= 5,      progress: Math.min(distinctCatCount, 5),      total: 5 },
     { emoji: '🌍', label: 'Globe Trotter',     desc: 'Log a travel expense',            earned: hasTravelSpend,             progress: hasTravelSpend ? 1 : 0,             total: 1 },
     // Income & savings
     { emoji: '💰', label: 'Income Tracker',    desc: 'Log your first income',           earned: hasIncome,                  progress: hasIncome ? 1 : 0,                  total: 1 },

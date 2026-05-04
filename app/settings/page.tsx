@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
+import { toast } from 'sonner';
 import { useTheme } from '@/app/theme-context';
 
 function Row({
@@ -107,6 +108,7 @@ export default function SettingsPage() {
     } else {
       setDeleting(false);
       setShowDeleteConfirm(false);
+      toast.error('Failed to delete account. Please try again.');
     }
   }
 

@@ -73,28 +73,30 @@ export async function POST(request: Request) {
     });
 
     const plaidTxs = txRes.data.transactions;
-    let synced = 0;
 
-    for (const tx of plaidTxs) {
-      const exists = await Transaction.findOne({ plaidTransactionId: tx.transaction_id });
-      if (exists) continue;
+    // Fetch all already-imported Plaid IDs in one query instead of one per transaction
+    const incomingIds = plaidTxs.map(tx => tx.transaction_id);
+    const existing = await Transaction.find(
+      { plaidTransactionId: { $in: incomingIds } },
+      { plaidTransactionId: 1 }
+    ).lean();
+    const existingIds = new Set(existing.map((tx: { plaidTransactionId: string }) => tx.plaidTransactionId));
 
-      const category = mapCategory(tx.category ?? null);
-      // Plaid: positive = debit (expense). SpenDrift: negative = expense, positive = income.
-      const amount = Math.round(-tx.amount * 100);
-
-      await Transaction.create({
+    const toInsert = plaidTxs
+      .filter(tx => !existingIds.has(tx.transaction_id))
+      .map(tx => ({
         userId: session.user.id,
-        amount,
-        category,
+        // Plaid: positive = debit (expense). SpenDrift: negative = expense, positive = income.
+        amount: Math.round(-tx.amount * 100),
+        category: mapCategory(tx.category ?? null),
         description: tx.name,
         date: new Date(tx.date),
         plaidTransactionId: tx.transaction_id,
-      });
-      synced++;
-    }
+      }));
 
-    return NextResponse.json({ synced });
+    if (toInsert.length > 0) await Transaction.insertMany(toInsert, { ordered: false });
+
+    return NextResponse.json({ synced: toInsert.length });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: 'Failed to exchange token' }, { status: 500 });

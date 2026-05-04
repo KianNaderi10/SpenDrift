@@ -56,8 +56,9 @@ export async function GET() {
     const hasIncomeEver = allTxs.some((tx: { amount: number }) => tx.amount > 0);
     const distinctCatCount = new Set(allExpenses.map((tx: { category: string }) => tx.category)).size;
 
-    // Top drift insights
+    // Top drift insights (expenses only — income drift is not a spending insight)
     const insights = Object.entries(drift)
+      .filter(([cat]) => cat !== 'income')
       .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
       .slice(0, 3)
       .map(([cat, pct]) => ({

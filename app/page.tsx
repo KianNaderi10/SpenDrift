@@ -59,7 +59,7 @@ export default function LandingPage() {
 
   const steps = [
     { step: '01', title: 'Create your account',    desc: 'Sign up in seconds — no credit card, no hidden fees. Your data stays private.' },
-    { step: '02', title: 'Connect your bank',       desc: 'Link your bank account to automatically sync transactions, or add them manually.' },
+    { step: '02', title: 'Connect your bank (optional)', desc: 'Link your bank to automatically sync transactions, or skip this and log them manually — totally up to you.' },
     { step: '03', title: 'Log your transactions',   desc: 'Every purchase is tracked and categorized to build your spending profile over time.' },
     { step: '04', title: 'Discover your archetype', desc: 'Our engine analyzes your habits and assigns you one of 20 spending personalities.' },
     { step: '05', title: 'Track your drift',        desc: 'Watch your archetype evolve over time as your spending habits shift and grow.' },

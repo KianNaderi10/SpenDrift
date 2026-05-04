@@ -975,6 +975,8 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, onEdit,
     }
     const cents = Math.round(dollars * 100);
     const finalAmount = isIncome ? cents : -cents;
+    const willEarnGlobeTrotter = !isIncome && category === 'travel' &&
+      !transactions.some(tx => tx.category === 'travel' && tx.amount < 0);
     setLoading(true);
     const res = await fetch('/api/transactions', {
       method: 'POST',
@@ -1004,6 +1006,10 @@ function LogTab({ onLogged, budgets, insights, transactions, onNavigate, onEdit,
       }
     } else {
       toast.success('Income logged!');
+    }
+
+    if (willEarnGlobeTrotter) {
+      setTimeout(() => toast.success('🌍 Globe Trotter badge earned! Check your Profile.'), 400);
     }
 
     setAmount('');

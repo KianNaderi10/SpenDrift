@@ -1487,10 +1487,11 @@ function ProfileTab({ userName, userEmail, userCreatedAt, transactions, insights
 
   let streak = 0;
   if (transactions.length > 0) {
-    const txDates = new Set(transactions.map(tx => format(new Date(tx.date), 'yyyy-MM-dd')));
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    const utcDate = (d: Date) => d.toISOString().split('T')[0];
+    const txDates = new Set(transactions.map(tx => utcDate(new Date(tx.date))));
+    const todayStr = utcDate(new Date());
     let check = txDates.has(todayStr) ? new Date() : subDays(new Date(), 1);
-    while (txDates.has(format(check, 'yyyy-MM-dd'))) {
+    while (txDates.has(utcDate(check))) {
       streak++;
       check = subDays(check, 1);
     }

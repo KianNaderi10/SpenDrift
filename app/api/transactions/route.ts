@@ -30,6 +30,9 @@ export async function POST(request: Request) {
     if (!amount || !category) {
       return NextResponse.json({ error: 'Amount and category are required' }, { status: 400 });
     }
+    if (date && isNaN(new Date(date).getTime())) {
+      return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
+    }
     await connectDB();
     const tx = await Transaction.create({
       userId: session.user.id,

@@ -19,7 +19,7 @@ export async function GET() {
     const [thisMonthTxs, lastMonthTxs, allTxs] = await Promise.all([
       Transaction.find({ userId: session.user.id, date: { $gte: thisMonthStart } }),
       Transaction.find({ userId: session.user.id, date: { $gte: lastMonthStart, $lte: lastMonthEnd } }),
-      Transaction.find({ userId: session.user.id }).sort({ date: 1 }).limit(500),
+      Transaction.find({ userId: session.user.id }).sort({ date: -1 }).limit(500),
     ]);
 
     // Category totals (absolute values for expenses)

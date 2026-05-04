@@ -13,6 +13,12 @@ export async function PATCH(
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     const { id } = await params;
     const { amount, category, description, date } = await req.json();
+    if (amount !== undefined && (typeof amount !== 'number' || isNaN(amount))) {
+      return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
+    }
+    if (category !== undefined && (typeof category !== 'string' || !category.trim())) {
+      return NextResponse.json({ error: 'Invalid category' }, { status: 400 });
+    }
     await connectDB();
     const tx = await Transaction.findOneAndUpdate(
       { _id: id, userId: session.user.id },
@@ -20,7 +26,7 @@ export async function PATCH(
       { new: true }
     );
     if (!tx) return NextResponse.json({ error: 'Not found' }, { status: 404 });
-    return NextResponse.json({ success: true });
+    return NextResponse.json(tx);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });

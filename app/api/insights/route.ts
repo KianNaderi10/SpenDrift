@@ -14,7 +14,6 @@ export async function GET() {
     const now = new Date();
     const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
 
     const [thisMonthTxs, lastMonthTxs, allTxs] = await Promise.all([
       Transaction.find({ userId: session.user.id, date: { $gte: thisMonthStart } }),
@@ -22,18 +21,18 @@ export async function GET() {
       Transaction.find({ userId: session.user.id }).sort({ date: -1 }).limit(500),
     ]);
 
-    // Category totals (absolute values for expenses)
+    // Category totals — expenses as positive cents, income tracked separately under 'income' key
     const thisTotals: Record<string, number> = {};
     for (const tx of thisMonthTxs) {
       const cat = tx.category;
       const amt = Math.abs(tx.amount);
-      if (tx.amount < 0) thisTotals[cat] = (thisTotals[cat] ?? 0) + amt;
+      if (tx.amount < 0 || cat === 'income') thisTotals[cat] = (thisTotals[cat] ?? 0) + amt;
     }
     const lastTotals: Record<string, number> = {};
     for (const tx of lastMonthTxs) {
       const cat = tx.category;
       const amt = Math.abs(tx.amount);
-      if (tx.amount < 0) lastTotals[cat] = (lastTotals[cat] ?? 0) + amt;
+      if (tx.amount < 0 || cat === 'income') lastTotals[cat] = (lastTotals[cat] ?? 0) + amt;
     }
 
     // Drift percentages per category
@@ -87,12 +86,12 @@ export async function GET() {
     const weekdayAvg = weekdayCount > 0 ? weekdayTotal / weekdayCount : 0;
     const weekendDiff = weekdayAvg > 0 ? Math.round(((weekendAvg - weekdayAvg) / weekdayAvg) * 100) : 0;
 
-    // Daily spending last 7 days
+    // Daily spending last 30 days (streak needs up to 31, chart uses last 7)
     const daily: Record<string, number> = {};
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6);
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     for (const tx of allTxs) {
-      if (tx.amount < 0 && new Date(tx.date) >= sevenDaysAgo) {
+      if (tx.amount < 0 && new Date(tx.date) >= thirtyDaysAgo) {
         const key = new Date(tx.date).toISOString().split('T')[0];
         daily[key] = (daily[key] ?? 0) + Math.abs(tx.amount);
       }

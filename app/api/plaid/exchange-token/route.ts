@@ -72,15 +72,18 @@ export async function POST(request: Request) {
       end_date: endDate,
     });
 
-    const plaidTxs = txRes.data.transactions;
+    const plaidTxs = txRes.data.transactions ?? [];
 
-    // Fetch all already-imported Plaid IDs in one query instead of one per transaction
+    // Batch-check which IDs are already imported (one query instead of N)
     const incomingIds = plaidTxs.map(tx => tx.transaction_id);
-    const existing = await Transaction.find(
-      { plaidTransactionId: { $in: incomingIds } },
-      { plaidTransactionId: 1 }
-    ).lean();
-    const existingIds = new Set(existing.map((tx: { plaidTransactionId: string }) => tx.plaidTransactionId));
+    let existingIds = new Set<string>();
+    if (incomingIds.length > 0) {
+      const existing = await Transaction.find(
+        { plaidTransactionId: { $in: incomingIds } },
+        { plaidTransactionId: 1 }
+      ).lean() as { plaidTransactionId: string }[];
+      existingIds = new Set(existing.map(tx => tx.plaidTransactionId));
+    }
 
     const toInsert = plaidTxs
       .filter(tx => !existingIds.has(tx.transaction_id))
@@ -89,14 +92,25 @@ export async function POST(request: Request) {
         // Plaid: positive = debit (expense). SpenDrift: negative = expense, positive = income.
         amount: Math.round(-tx.amount * 100),
         category: mapCategory(tx.category ?? null),
-        description: tx.name,
+        description: tx.name ?? '',
         date: new Date(tx.date),
         plaidTransactionId: tx.transaction_id,
       }));
 
-    if (toInsert.length > 0) await Transaction.insertMany(toInsert, { ordered: false });
+    let synced = 0;
+    if (toInsert.length > 0) {
+      try {
+        await Transaction.insertMany(toInsert, { ordered: false });
+        synced = toInsert.length;
+      } catch (insertErr: unknown) {
+        // ordered:false — some docs may have inserted despite the error
+        const result = (insertErr as { insertedDocs?: unknown[] }).insertedDocs;
+        synced = Array.isArray(result) ? result.length : 0;
+        console.error('Partial Plaid insert error:', insertErr);
+      }
+    }
 
-    return NextResponse.json({ synced: toInsert.length });
+    return NextResponse.json({ synced });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: 'Failed to exchange token' }, { status: 500 });

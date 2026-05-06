@@ -21,7 +21,10 @@ export async function POST(request: Request) {
     const user = await User.create({ name, email: email.toLowerCase(), password: hashed });
     return NextResponse.json({ id: user._id.toString(), name: user.name, email: user.email }, { status: 201 });
   } catch (err: any) {
-    console.error('REGISTER_ERROR', err?.name, 'code:', err?.code, 'codeName:', err?.codeName, 'msg:', err?.message);
+    console.error('REG_NAME:' + err?.name);
+    console.error('REG_CODE:' + err?.code);
+    console.error('REG_CODENAME:' + err?.codeName);
+    console.error('REG_MSG:' + String(err?.message).slice(0, 300));
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

@@ -20,8 +20,8 @@ export async function POST(request: Request) {
     const hashed = await bcrypt.hash(password, 12);
     const user = await User.create({ name, email: email.toLowerCase(), password: hashed });
     return NextResponse.json({ id: user._id.toString(), name: user.name, email: user.email }, { status: 201 });
-  } catch (err) {
-    console.error(err);
+  } catch (err: any) {
+    console.error('REGISTER_ERROR', err?.name, 'code:', err?.code, 'codeName:', err?.codeName, 'msg:', err?.message);
     return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

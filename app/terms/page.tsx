@@ -62,8 +62,8 @@ export default function TermsPage() {
             </ul>
           </Section>
 
-          <Section title="Bank Account Connection">
-            If you connect a bank account, you authorize SpenDrift to retrieve your transaction history in read-only mode for the purpose of generating your spending profile. You may disconnect at any time. You acknowledge that the accuracy of your archetype depends on the completeness of your transaction data.
+          <Section title="Bank Account Connection (Plaid)">
+            SpenDrift uses <a href="https://plaid.com" target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none' }}>Plaid Inc.</a> to securely connect your bank account. By connecting a bank account, you authorize SpenDrift and Plaid to retrieve your transaction history in read-only mode for the purpose of generating your spending profile. You also agree to <a href="https://plaid.com/legal/#end-user-privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none' }}>Plaid's End User Privacy Policy</a>. SpenDrift never stores your bank login credentials — they are handled exclusively by Plaid. You may disconnect your bank account at any time from your account settings. You acknowledge that the accuracy of your archetype depends on the completeness of your transaction data.
           </Section>
 
           <Section title="Acceptable Use">

@@ -54,8 +54,8 @@ export default function PrivacyPage() {
             </ul>
           </Section>
 
-          <Section title="Bank Account Connection">
-            If you choose to connect a bank account, we use secure, read-only access to retrieve your transaction history. We do not store your bank credentials. We never initiate transactions, move funds, or share your financial data with third parties for advertising purposes. You can disconnect your bank account at any time from your account settings.
+          <Section title="Bank Account Connection (Plaid)">
+            If you choose to connect a bank account, SpenDrift uses <a href="https://plaid.com" target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none' }}>Plaid Inc.</a> as a trusted third-party service to facilitate the connection. Plaid retrieves your transaction history on our behalf using secure, read-only access. We do not store your bank login credentials — these are handled exclusively by Plaid and never seen by SpenDrift. By connecting a bank account, your data is also subject to <a href="https://plaid.com/legal/#end-user-privacy-policy" target="_blank" rel="noopener noreferrer" style={{ color: '#16a34a', textDecoration: 'none' }}>Plaid's End User Privacy Policy</a>. We never initiate transactions, move funds, or share your financial data with third parties for advertising purposes. You can disconnect your bank account at any time from your account settings.
           </Section>
 
           <Section title="How We Use Your Information">

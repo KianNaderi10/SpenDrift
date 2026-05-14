@@ -26,6 +26,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Category and limit are required' }, { status: 400 });
     }
     await connectDB();
+    // Upsert so the same endpoint handles both creating a new budget and updating an existing one.
+    // The unique index on {userId, category} ensures only one budget exists per category per user.
     const budget = await Budget.findOneAndUpdate(
       { userId: session.user.id, category },
       { limit },

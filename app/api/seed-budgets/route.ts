@@ -4,16 +4,19 @@ import { authOptions } from '@/lib/auth';
 import { connectDB } from '@/lib/db';
 import Budget from '@/models/Budget';
 
+// All limits are in cents (e.g., 50000 = $500.00). These are opinionated defaults seeded
+// at registration so new users see budget bars immediately rather than an empty state.
+// Users can adjust any limit from the dashboard.
 const DEFAULT_BUDGETS = [
-  { category: 'dining', limit: 50000 },
-  { category: 'groceries', limit: 25000 },
-  { category: 'coffee', limit: 6000 },
-  { category: 'entertainment', limit: 40000 },
-  { category: 'transport', limit: 15000 },
-  { category: 'shopping', limit: 30000 },
-  { category: 'health', limit: 10000 },
-  { category: 'travel', limit: 50000 },
-  { category: 'bills', limit: 100000 },
+  { category: 'dining', limit: 50000 },       // $500
+  { category: 'groceries', limit: 25000 },    // $250
+  { category: 'coffee', limit: 6000 },        // $60
+  { category: 'entertainment', limit: 40000 }, // $400
+  { category: 'transport', limit: 15000 },    // $150
+  { category: 'shopping', limit: 30000 },     // $300
+  { category: 'health', limit: 10000 },       // $100
+  { category: 'travel', limit: 50000 },       // $500
+  { category: 'bills', limit: 100000 },       // $1000
 ];
 
 export async function POST() {

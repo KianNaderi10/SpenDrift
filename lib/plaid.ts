@@ -1,5 +1,7 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid';
 
+// Defaults to 'sandbox' so local dev works without real bank credentials.
+// Set PLAID_ENV=production in Vercel env vars when going live.
 const env = (process.env.PLAID_ENV ?? 'sandbox') as keyof typeof PlaidEnvironments;
 
 export const plaidClient = new PlaidApi(

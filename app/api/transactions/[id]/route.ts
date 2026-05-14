@@ -23,6 +23,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Invalid date' }, { status: 400 });
     }
     await connectDB();
+    // userId in the query prevents users from editing each other's transactions.
     const tx = await Transaction.findOneAndUpdate(
       { _id: id, userId: session.user.id },
       { $set: { amount, category, description, date } },

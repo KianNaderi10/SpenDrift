@@ -7,6 +7,8 @@ import User from '@/models/User';
 import Transaction from '@/models/Transaction';
 import { format, subDays } from 'date-fns';
 
+// Maps Plaid's category strings to SpenDrift's internal category set.
+// Only the first matching entry wins (see mapCategory), so order matters for overlapping labels.
 const CATEGORY_MAP: Record<string, string> = {
   'Food and Drink': 'dining',
   'Restaurants': 'dining',
@@ -47,6 +49,8 @@ function mapCategory(plaidCategories: string[] | null): string {
   return 'other';
 }
 
+// Step 2 of the Plaid Link flow: exchange the one-time public_token for a persistent
+// access_token, then immediately back-fill 90 days of transactions.
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions);

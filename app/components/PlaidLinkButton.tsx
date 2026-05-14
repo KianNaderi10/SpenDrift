@@ -17,6 +17,8 @@ interface Props {
   };
 }
 
+// Separate inner component so usePlaidLink only mounts after we have a valid link token.
+// Mounting it unconditionally would require a token immediately, which we don't have yet.
 function LinkButton({ linkToken, onSuccess, onExit, C }: Props & { linkToken: string; onExit: () => void }) {
   const handleSuccess: PlaidLinkOnSuccess = useCallback(async (public_token) => {
     try {
@@ -36,6 +38,7 @@ function LinkButton({ linkToken, onSuccess, onExit, C }: Props & { linkToken: st
 
   const { open, ready } = usePlaidLink({ token: linkToken, onSuccess: handleSuccess, onExit });
 
+  // Open the Plaid modal as soon as the SDK reports it is ready.
   useEffect(() => {
     if (ready) open();
   }, [ready, open]);
@@ -43,6 +46,9 @@ function LinkButton({ linkToken, onSuccess, onExit, C }: Props & { linkToken: st
   return null;
 }
 
+// Two-step flow: clicking the button fetches a link token from our API, which triggers
+// LinkButton to mount and immediately open the Plaid modal. On success or exit, the
+// token is cleared and loading state resets.
 export default function PlaidLinkButton({ onSuccess, C }: Props) {
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

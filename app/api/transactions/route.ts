@@ -9,6 +9,7 @@ export async function GET() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     await connectDB();
+    // 90-day window matches the Plaid import range so the dashboard shows a consistent history.
     const since = new Date();
     since.setDate(since.getDate() - 90);
     const transactions = await Transaction.find({

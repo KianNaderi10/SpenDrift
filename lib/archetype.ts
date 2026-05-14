@@ -189,11 +189,16 @@ export const ARCHETYPES: Record<string, {
   },
 };
 
+// Determines the user's spending archetype from this month's category totals (in cents).
+// Income is excluded — archetypes are about expense patterns only.
+// Rules are evaluated in priority order; the first match wins.
 export function computeArchetype(categoryTotals: Record<string, number>): string {
   const expenses = Object.entries(categoryTotals).filter(([k]) => k !== 'income');
   if (!expenses.length) return 'homebody';
   const total = expenses.reduce((s, [, v]) => s + v, 0);
   if (total === 0) return 'homebody';
+
+  // Convert absolute amounts to fractions so thresholds are percentage-based, not dollar-based.
   const pcts: Record<string, number> = {};
   for (const [cat, amt] of expenses) pcts[cat] = amt / total;
 
@@ -213,7 +218,10 @@ export function computeArchetype(categoryTotals: Record<string, number>): string
   if (((pcts.luxury ?? 0) + (pcts.designer ?? 0)) >= 0.20) return 'statusseeker';
   if ((pcts.donations ?? 0) >= 0.15) return 'philanthropist';
   if (((pcts.crypto ?? 0) + (pcts.investments ?? 0)) >= 0.20) return 'speculator';
+  // Bills + groceries dominating = home-focused lifestyle
   if (((pcts.bills ?? 0) + (pcts.groceries ?? 0)) >= 0.60) return 'homebody';
+  // Under $500 total spend — intentional low-consumption lifestyle
   if (total < 50000) return 'minimalist';
+  // High spending that doesn't fit a clear pattern = impulse buyer
   return 'impulsebuyer';
 }

@@ -6,6 +6,7 @@ const ThemeContext = createContext<{ theme: Theme; toggle: () => void }>({ theme
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setTheme] = useState<Theme>('light');
+  // mounted prevents reading localStorage during SSR, which would cause a hydration mismatch.
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -21,6 +22,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const next = theme === 'light' ? 'dark' : 'light';
     setTheme(next);
     localStorage.setItem('spendrift-theme', next);
+    // data-theme on <html> lets CSS variables respond to the theme without React re-rendering the whole tree.
     document.documentElement.setAttribute('data-theme', next);
   };
 

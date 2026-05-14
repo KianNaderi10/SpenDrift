@@ -57,6 +57,7 @@ export async function DELETE() {
 
     await connectDB();
     const uid = session.user.id;
+    // Run all three deletes in parallel — they are independent collections.
     await Promise.all([
       Transaction.deleteMany({ userId: uid }),
       Budget.deleteMany({ userId: uid }),
